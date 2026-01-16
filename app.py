@@ -1,7 +1,7 @@
-import math
 import numpy as np
 import streamlit as st
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 
 st.set_page_config(page_title="Standard American Life — Health Timeline", page_icon="🧭", layout="wide")
 
@@ -27,14 +27,6 @@ MOUNTAIN_SVG = """
 </svg>
 """
 
-CHECK_ENGINE_BADGE = """
-<svg width="92" height="92" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
-  <rect x="6" y="6" width="84" height="84" rx="16" fill="white" stroke="rgba(195, 56, 56, 0.55)" stroke-width="3"/>
-  <text x="48" y="42" text-anchor="middle" font-size="14" font-family="Arial" fill="rgb(163, 34, 34)" font-weight="700">CHECK</text>
-  <text x="48" y="62" text-anchor="middle" font-size="14" font-family="Arial" fill="rgb(163, 34, 34)" font-weight="700">ENGINE</text>
-</svg>
-"""
-
 st.markdown(
     f"""
 <style>
@@ -44,26 +36,23 @@ st.markdown(
     linear-gradient(180deg, #fbf7ef 0%, #f7f1e6 100%);
   color: #1f1f1f;
 }}
-/* mountains */
+
 .lrp-mountains {{
   position: fixed;
   left: 0; right: 0; bottom: -10px;
   height: 240px;
   pointer-events: none;
-  opacity: 0.40;     /* make them visible */
+  opacity: 0.45;   /* visible but still faint */
   z-index: 0;
 }}
 .block-container {{
   position: relative;
   z-index: 1;
   padding-bottom: 160px;
-  max-width: 1600px; /* allow more width for chart */
+  max-width: 1600px;
+  padding-top: 1.3rem;
 }}
-/* tighten Streamlit top padding */
-.block-container {{
-  padding-top: 1.5rem;
-}}
-/* Typography */
+
 .h1 {{
   font-size: 42px;
   font-weight: 900;
@@ -77,7 +66,7 @@ st.markdown(
   opacity: 0.70;
   margin: 4px 0 10px 0;
 }}
-/* Cards */
+
 .card {{
   border-radius: 18px;
   background: rgba(255,255,255,0.93);
@@ -93,7 +82,7 @@ st.markdown(
   font-size: 14px;
   opacity: 0.82;
 }}
-/* Bullets */
+
 .bullets {{
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -113,26 +102,26 @@ st.markdown(
   margin-top: 8px;
   flex: 0 0 9px;
 }}
-/* Band nav row */
+
 .bandrow {{
   display:flex;
   justify-content:center;
   align-items:center;
   gap: 16px;
-  margin: 10px 0 14px 0;
+  margin: 10px 0 12px 0;
 }}
 .bandpill {{
   font-size: 22px;
   font-weight: 800;
 }}
-/* Make the band buttons look like the slide */
+
 div.stButton > button {{
   border-radius: 14px;
   padding: 6px 14px;
   border: 1px solid rgba(0,0,0,0.10);
   background: rgba(255,255,255,0.92);
 }}
-/* Right column header icons */
+
 .hdr {{
   display:flex;
   align-items:center;
@@ -145,19 +134,21 @@ div.stButton > button {{
   background: rgba(0,0,0,0.05);
   font-weight: 800;
 }}
-/* Check engine row */
-.engine-row {{
+
+.kpi-title {{
+  font-size: 20px;
+  font-weight: 900;
+  margin: 0;
+}}
+.kpi-row {{
   display:flex;
+  gap: 14px;
   align-items:center;
-  gap: 16px;
 }}
-.engine-status {{
-  font-size: 22px;
-  font-weight: 850;
-}}
-.engine-sub {{
+.kpi-sub {{
   font-size: 14px;
   opacity: 0.78;
+  margin-top: 4px;
 }}
 </style>
 
@@ -172,20 +163,6 @@ div.stButton > button {{
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
-def label_zone(score: float):
-    if score >= 70:
-        return "Fit", "🟢"
-    if score >= 40:
-        return "Functional", "🟡"
-    return "Frail", "🔴"
-
-def label_engine(score: float):
-    if score >= 70:
-        return "Green", "🟢"
-    if score >= 45:
-        return "Yellow", "🟡"
-    return "Red", "🔴"
-
 def band_label_for_age(age: int) -> str:
     a0 = (age // 5) * 5
     a1 = a0 + 5
@@ -193,65 +170,77 @@ def band_label_for_age(age: int) -> str:
     a1 = min(95, a1)
     return f"{a0}-{a1}"
 
-# -----------------------------
-# SAL capacity curve (more realistic: Fit → Functional → Frail)
-# -----------------------------
-def capacity_curve(age: float) -> float:
+def label_engine(score: float):
+    if score >= 70:
+        return "Green", "#39b66a"
+    if score >= 45:
+        return "Yellow", "#d6a400"
+    return "Red", "#c63b3b"
+
+def label_zone(score: float):
+    if score >= 70:
+        return "Fit", "#39b66a"
+    if score >= 40:
+        return "Functional", "#d6a400"
+    return "Frail", "#c63b3b"
+
+def sal_capacity(age: float) -> float:
     """
-    A more realistic Standard American Life curve:
-    - strong early adulthood
-    - gradual drift into Functional by ~50s/60s
-    - sharp decline after ~70
-    - hits Frail by late 70s
+    More slide-like Standard American Life curve via anchored points + interpolation.
+    Adjust anchors later if you want it steeper/shallower.
     """
-    age = float(age)
+    # Anchors: (age, capacity)
+    pts = np.array([
+        [0,  88],
+        [20, 86],
+        [40, 78],
+        [55, 66],
+        [60, 62],
+        [70, 45],
+        [77, 20],
+    ], dtype=float)
 
-    # Start near Fit, then slow drift
-    s = 86 - 0.32 * max(age - 20, 0)          # gradual decline
-    s -= 0.55 * max(age - 60, 0)              # steeper after 60
-    s -= 1.10 * max(age - 70, 0)              # sharper after 70
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return float(np.interp(age, x, y))
 
-    # Keep early life stable
-    if age < 20:
-        s = 82 + 0.15 * age                   # ~82 at 0, ~85 at 20
-
-    return clamp(s, 0, 100)
-
-# Check engine proxy (kept, but hidden unless Advanced opened)
 def check_engine_score(age: float, risk: float, years_consistent: float) -> float:
-    age = float(age)
+    # Keeps your idea: slow-changing risk + consistency offset.
     age_penalty = 0.30 * max(age - 25, 0) + 0.55 * max(age - 60, 0)
     risk_penalty = 0.45 * risk
     consistency_boost = 2.0 * clamp(years_consistent, 0, 12)
     return clamp(88 - age_penalty - risk_penalty + consistency_boost, 0, 100)
 
+def engine_svg(color_hex: str) -> str:
+    # Simple engine icon that changes color
+    return f"""
+<svg width="44" height="44" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <path d="M22 18h18l4 6h6v8h-4l-2 6h-2v8H22v-6h-6v-8h4l2-6h2z"
+        fill="{color_hex}" opacity="0.95"/>
+  <path d="M24 28h16v16H24z" fill="white" opacity="0.25"/>
+</svg>
+"""
+
 # -----------------------------
-# Stage content (still placeholders—swap with your real deck copy later)
+# Stage text (still placeholders — swap with your exact deck copy later)
 # -----------------------------
 LEFT_STAGE = {
+    "50-55": ("Medicalized Living", [
+        "Multiple medications begin; side effects stack quietly",
+        "Sleep fragments; fatigue becomes baseline",
+        "Movement becomes cautious; joints “protected”",
+        "Pain management replaces performance",
+    ]),
     "55-60": ("Medicalized Living", [
         "Multiple medications begin; side effects stack quietly",
         "Sleep fragments; fatigue becomes baseline",
         "Movement becomes cautious; joints “protected”",
         "Pain management replaces performance",
     ]),
-    "50-55": ("Medicalized Living", [
-        "Markers creep upward; warnings ignored",
-        "Strength fades; stiffness becomes “normal”",
-        "Sleep quality declines quietly",
-        "Movement volume drops as life gets busy",
-    ]),
-    "60-65": ("Medicalized Living", [
-        "More appointments; more complexity",
-        "Recovery slows; minor issues linger",
-        "Balance declines if untrained",
-        "Social life narrows with energy",
-    ]),
 }
 RIGHT_STAGE = {
+    "50-55": ("Managing conditions", "Adjust meds; reduce risk"),
     "55-60": ("Managing conditions", "Adjust meds; reduce risk"),
-    "50-55": ("Managing drift", "Intervene: strength, Zone 2, nutrition"),
-    "60-65": ("Prevent compounding", "Simplify meds; train balance; protect sleep"),
 }
 
 # -----------------------------
@@ -261,12 +250,11 @@ st.markdown('<div class="h1">A Standard American Life — Health Timeline</div>'
 st.markdown('<div class="sub">What happens if nothing intervenes</div>', unsafe_allow_html=True)
 
 # -----------------------------
-# Band navigation ONLY (remove the big sliders from the UI)
+# Band navigation ONLY
 # -----------------------------
 if "age" not in st.session_state:
-    st.session_state.age = 55  # start around your example
+    st.session_state.age = 55
 
-# Centered nav row (← 50-55 →)
 navL, navM, navR = st.columns([1, 2, 1])
 with navL:
     if st.button("←", key="prev_band"):
@@ -281,25 +269,20 @@ with navR:
 age = st.session_state.age
 band = band_label_for_age(age)
 
-# Optional advanced controls (collapsed by default so you don’t see big bars)
-with st.expander("Advanced (optional)", expanded=False):
-    conditioning = st.slider("Current Conditioning (fast)", -25, 25, 0)
-    risk = st.slider("Biomarker Risk (slow)", 0, 100, 35)
-    years_consistent = st.slider("Years Consistent (slow)", 0, 12, 3)
-
-# Defaults when Advanced closed
-conditioning = locals().get("conditioning", 0)
-risk = locals().get("risk", 35)
-years_consistent = locals().get("years_consistent", 3)
+# Internal defaults (no UI sliders)
+conditioning = -16   # you can change these constants later
+risk = 15
+years_consistent = 3
 
 # Scores
-base = capacity_curve(age)
+base = sal_capacity(age)
 zone_score = clamp(base + conditioning, 0, 100)
-zone_name, zone_dot = label_zone(zone_score)
-engine = check_engine_score(age, risk=risk, years_consistent=years_consistent)
-engine_name, engine_dot = label_engine(engine)
+zone_name, zone_color = label_zone(zone_score)
 
-# Stage text
+engine_score = check_engine_score(age, risk=risk, years_consistent=years_consistent)
+engine_name, engine_color = label_engine(engine_score)
+
+# Stage copy
 left_title, left_bullets = LEFT_STAGE.get(
     band,
     ("Standard Living", [
@@ -312,9 +295,9 @@ left_title, left_bullets = LEFT_STAGE.get(
 diag_text, rx_text = RIGHT_STAGE.get(band, ("Managing conditions", "Adjust meds; reduce risk"))
 
 # -----------------------------
-# Main 3-column layout: widen chart by tightening sides
+# Layout (wider chart)
 # -----------------------------
-colL, colC, colR = st.columns([1.0, 2.15, 1.0], gap="large")
+colL, colC, colR = st.columns([1.0, 2.35, 1.0], gap="large")
 
 with colL:
     bullets_html = "".join([f"<div class='b'><div class='dot'></div><div>{t}</div></div>" for t in left_bullets])
@@ -329,62 +312,51 @@ with colL:
     )
 
 with colC:
-    ages = np.arange(0, 93, 1)
-    cap = np.array([capacity_curve(a) for a in ages])
+    # Build curve
+    xs = np.arange(0, 78, 1)
+    ys = np.array([sal_capacity(x) for x in xs])
 
-    fig = go.Figure()
-
-    # Life curve (pale pink)
-    fig.add_trace(go.Scatter(
-        x=ages, y=cap,
-        mode="lines",
-        line=dict(width=5, color="rgba(194, 122, 122, 0.42)"),
-        hoverinfo="skip"
-    ))
-
-    # Highlight current band segment (red)
+    # Current band segment highlight
     a0 = (age // 5) * 5
-    seg_x = np.arange(a0, min(a0 + 5, 92) + 1, 1)
-    seg_y = np.array([capacity_curve(x) for x in seg_x])
-    fig.add_trace(go.Scatter(
-        x=seg_x, y=seg_y,
-        mode="lines",
-        line=dict(width=7, color="rgba(170, 30, 30, 0.95)"),
-        hoverinfo="skip"
-    ))
+    seg_x = np.arange(a0, min(a0 + 5, 77) + 1, 1)
+    seg_y = np.array([sal_capacity(x) for x in seg_x])
 
-    # End marker at 77 (like your slide)
-    fig.add_shape(type="line", x0=77, x1=77, y0=0, y1=100,
-                  line=dict(color="rgba(0,0,0,0.28)", width=5))
+    # Matplotlib figure
+    fig, ax = plt.subplots(figsize=(9.2, 5.4), dpi=140)
 
-    fig.update_layout(
-        height=560,  # taller
-        margin=dict(l=55, r=22, t=10, b=60),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(
-            title="Age",
-            range=[0, 77],
-            tickmode="array",
-            tickvals=list(range(0, 80, 5)),
-            showgrid=False,
-            zeroline=False,
-            linecolor="rgba(0,0,0,0.35)",
-        ),
-        yaxis=dict(
-            range=[0, 100],
-            tickmode="array",
-            tickvals=[20, 55, 85],
-            ticktext=["Frail", "Functional", "Fit"],
-            showgrid=False,
-            zeroline=False,
-            linecolor="rgba(0,0,0,0.35)",
-        ),
-        showlegend=False
-    )
+    # Transparent so the card shows through
+    fig.patch.set_alpha(0)
+    ax.set_facecolor((0, 0, 0, 0))
+
+    # Main pale curve + red segment
+    ax.plot(xs, ys, linewidth=3.8, color=(0.76, 0.54, 0.54, 0.55))
+    ax.plot(seg_x, seg_y, linewidth=5.0, color=(0.67, 0.10, 0.10, 0.95))
+
+    # End marker at 77
+    ax.axvline(77, linewidth=3.2, color=(0, 0, 0, 0.22))
+
+    # Axis ranges and ticks
+    ax.set_xlim(0, 77)
+    ax.set_ylim(0, 100)
+
+    ax.set_xticks(list(range(0, 80, 5)))
+    ax.set_xlabel("Age", fontsize=10, color=(0, 0, 0, 0.68))
+
+    # Fit/Functional/Frail as y “ticks”
+    ax.set_yticks([20, 55, 85])
+    ax.set_yticklabels(["Frail", "Functional", "Fit"], fontsize=10, color=(0, 0, 0, 0.68))
+
+    # Clean look like slide (no grid)
+    ax.grid(False)
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color((0, 0, 0, 0.30))
+    ax.spines["bottom"].set_color((0, 0, 0, 0.30))
+    ax.tick_params(axis='x', colors=(0, 0, 0, 0.55), labelsize=8, length=0)
+    ax.tick_params(axis='y', colors=(0, 0, 0, 0.55), labelsize=8, length=0)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.plotly_chart(fig, use_container_width=True)
+    st.pyplot(fig, clear_figure=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with colR:
@@ -412,16 +384,33 @@ with colR:
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
+    # Check Engine (heading over engine icon) + Fit Zone (heading over circle)
     st.markdown(
         f"""
 <div class="card">
-  <h3 style="text-align:center; margin-bottom:10px;">Check Engine</h3>
-  <div class="engine-row">
-    <div>{CHECK_ENGINE_BADGE}</div>
+  <div class="kpi-row">
+    <div>{engine_svg(engine_color)}</div>
     <div>
-      <div class="engine-status">{engine_dot} {engine_name}</div>
-      <div class="engine-sub">Engine score: <b>{engine:.1f}</b></div>
-      <div class="engine-sub">Zone now: <b>{zone_dot} {zone_name}</b> ({zone_score:.1f})</div>
+      <p class="kpi-title">Check Engine</p>
+      <div class="small" style="font-size:18px; font-weight:800;">
+        <span style="color:{engine_color};">●</span> {engine_name}
+      </div>
+      <div class="kpi-sub">Engine score: <b>{engine_score:.1f}</b></div>
+    </div>
+  </div>
+
+  <div style="height:14px;"></div>
+  <div style="height:1px;background:rgba(0,0,0,0.08);"></div>
+  <div style="height:14px;"></div>
+
+  <div class="kpi-row">
+    <div style="width:44px;height:44px;border-radius:999px;background:{zone_color};opacity:0.9;"></div>
+    <div>
+      <p class="kpi-title">Fit Zone</p>
+      <div class="small" style="font-size:18px; font-weight:800;">
+        {zone_name}
+      </div>
+      <div class="kpi-sub">Zone score: <b>{zone_score:.1f}</b></div>
     </div>
   </div>
 </div>
