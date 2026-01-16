@@ -5,24 +5,26 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="A Standard American Life — Health Timeline", page_icon="🧭", layout="wide")
 
 # -----------------------------
-# Background (parchment + faint mountains)
+# Background (parchment + 2-layer mountains that rise to the right)
 # -----------------------------
-MOUNTAIN_SVG = """
-<svg viewBox="0 0 1200 260" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-  <path d="M0,210
-           C120,170 210,185 330,150
-           C430,120 520,155 620,130
-           C720,105 820,150 920,125
-           C1020,100 1100,145 1200,120
-           L1200,260 L0,260 Z"
-        fill="rgba(0,0,0,0.06)"/>
-  <path d="M0,235
-           C140,205 260,230 360,195
-           C470,160 560,215 680,175
-           C790,140 900,220 1030,165
-           C1110,130 1165,175 1200,155
-           L1200,260 L0,260 Z"
-        fill="rgba(0,0,0,0.09)"/>
+MOUNTAINS_SVG = """
+<svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+  <!-- back/lighter range -->
+  <path d="M0,260
+           C140,235 270,250 380,220
+           C520,180 610,215 740,185
+           C880,150 980,210 1090,165
+           C1150,140 1185,130 1200,120
+           L1200,320 L0,320 Z"
+        fill="rgba(0,0,0,0.05)"/>
+  <!-- front/darker range (rises to the right) -->
+  <path d="M0,295
+           C160,270 290,300 410,265
+           C540,230 650,285 790,240
+           C925,200 1000,275 1120,215
+           C1170,185 1190,170 1200,150
+           L1200,320 L0,320 Z"
+        fill="rgba(0,0,0,0.10)"/>
 </svg>
 """
 
@@ -46,16 +48,16 @@ st.markdown(
 }}
 .lrp-mountains {{
   position: fixed;
-  left: 0; right: 0; bottom: -10px;
-  height: 240px;
+  left: 0; right: 0; bottom: -18px;
+  height: 270px;
   pointer-events: none;
-  opacity: 0.45;
+  opacity: 0.75;   /* darker + more visible */
   z-index: 0;
 }}
 .block-container {{
   position: relative;
   z-index: 1;
-  padding-bottom: 160px;
+  padding-bottom: 170px;
   max-width: 1650px;
   padding-top: 1.2rem;
 }}
@@ -110,12 +112,12 @@ st.markdown(
   flex: 0 0 9px;
 }}
 
-/* Band nav: pull arrows close to the band label */
-.bandbar {{
+/* Band nav: symmetrical + tight */
+.bandrow {{
   display:flex;
   justify-content:center;
   align-items:center;
-  gap: 10px;
+  gap: 12px;
   margin: 12px 0 14px 0;
 }}
 .bandpill {{
@@ -124,7 +126,7 @@ st.markdown(
   min-width: 92px;
   text-align:center;
 }}
-.navbtn button {{
+.navbtn > div > button {{
   border-radius: 14px !important;
   padding: 6px 12px !important;
   border: 1px solid rgba(0,0,0,0.10) !important;
@@ -145,7 +147,7 @@ st.markdown(
 }}
 
 .kpi-title {{
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   margin: 0;
 }}
@@ -166,7 +168,7 @@ st.markdown(
 }}
 </style>
 
-<div class="lrp-mountains">{MOUNTAIN_SVG}</div>
+<div class="lrp-mountains">{MOUNTAINS_SVG}</div>
 """,
     unsafe_allow_html=True,
 )
@@ -184,32 +186,7 @@ def band_label_for_age(age: int) -> str:
     a1 = min(95, a1)
     return f"{a0}-{a1}"
 
-def label_zone(score: float):
-    # zone categories used only for coloring now (text removed per your request)
-    if score >= 70:
-        return "#39b66a"  # green
-    if score >= 40:
-        return "#d6a400"  # yellow
-    return "#c63b3b"      # red
-
-def engine_status_from_age_for_sal(age: float):
-    """
-    SAL messaging per your instruction:
-    - Yellow by ~20–25
-    - Red by ~30–35
-    Keep it largely age-driven (not fitness-driven), because it's biomarkers/risk drift.
-    """
-    if age < 22:
-        return "Green", "#39b66a"
-    if age < 33:
-        return "Yellow", "#d6a400"
-    return "Red", "#c63b3b"
-
-# -----------------------------
-# SAL curve: anchor points adjusted to your red sketch
-# - ~Functional by ~50
-# - steeper decline through 60s/70s
-# -----------------------------
+# SAL curve (keep your tuned anchors)
 def sal_capacity(age: float) -> float:
     pts = np.array([
         [0,  88],
@@ -217,7 +194,7 @@ def sal_capacity(age: float) -> float:
         [25, 80],
         [35, 73],
         [45, 66],
-        [50, 55],  # roughly Functional by 50
+        [50, 55],  # ~Functional by 50
         [55, 48],
         [60, 42],
         [65, 36],
@@ -229,10 +206,87 @@ def sal_capacity(age: float) -> float:
     y = pts[:, 1]
     return float(np.interp(age, x, y))
 
+# SAL Fit Zone color rules (per your instruction)
+# - Yellow at 20–25
+# - Red at 30–35 and onward
+# - Deeper red later
+def fit_zone_color_for_sal(age: float) -> str:
+    if age < 20:
+        return "#39b66a"  # green
+    if age < 30:
+        return "#d6a400"  # yellow
+    if age < 50:
+        return "#c63b3b"  # red
+    return "#9d1f1f"      # deeper red later
+
+# SAL Check Engine rules (delayed vs Fit Zone)
+# - Yellow at 30–35, 35–40, 40–45
+# - Red at 45–50 through 77
+def check_engine_color_for_sal(age: float) -> tuple[str, str]:
+    if age < 30:
+        return "Green", "#39b66a"
+    if age < 45:
+        return "Yellow", "#d6a400"
+    return "Red", "#c63b3b"
+
 # -----------------------------
-# Stage content (placeholder)
+# Copy by band (no placeholders)
 # -----------------------------
 LEFT_STAGE = {
+    "0-5": ("Standard Living", [
+        "Movement is natural; play provides daily training",
+        "Sleep is abundant; recovery is effortless",
+        "Food habits form early; sugar normalizes fast",
+        "Screens begin to replace outdoor hours",
+    ]),
+    "5-10": ("Standard Living", [
+        "Recess still helps; sitting begins to dominate",
+        "Sports become seasonal—not daily movement",
+        "Ultra-processed snacks become routine",
+        "Sleep starts slipping as schedules grow",
+    ]),
+    "10-15": ("Standard Living", [
+        "Activity drops; posture and mobility tighten",
+        "Social stress rises; comfort eating increases",
+        "Strength work is rare; peak potential is missed",
+        "Sleep becomes inconsistent; energy dips appear",
+    ]),
+    "15-20": ("Standard Living", [
+        "Sedentary time spikes; screens win the day",
+        "Fast food + sugar drinks feel “normal”",
+        "Injuries linger without strength foundations",
+        "Sleep debt becomes lifestyle",
+    ]),
+    "20-25": ("Standard Living", [
+        "Work/life sitting begins to dominate",
+        "Fitness becomes optional; consistency fades",
+        "Alcohol + late nights blunt recovery",
+        "Weight gain starts quietly",
+    ]),
+    "25-30": ("Standard Living", [
+        "Energy drops; “no time” becomes the reason",
+        "Muscle loss starts; strength training is absent",
+        "Stress climbs; sleep quality erodes",
+        "Biomarkers start drifting—unnoticed",
+    ]),
+    "30-35": ("Standard Living", [
+        "Metabolic health slips; inflammation rises",
+        "Back/hip/shoulder issues become common",
+        "Fat gain accelerates; muscle loss continues",
+        "Cardio fitness falls below functional needs",
+    ]),
+    "35-40": ("Standard Living", [
+        "Chronic aches become “normal” baseline",
+        "Blood pressure/markers creep upward",
+        "Recovery slows; minor setbacks linger",
+        "Fitness gaps show up in daily life",
+    ]),
+    "40-45": ("Medicalized Living", [
+        "First real warnings: labs, BP, sleep apnea risk",
+        "Pain management replaces performance goals",
+        "Movement becomes cautious; joints “protected”",
+        "Stress compounds; fatigue becomes baseline",
+    ]),
     "45-50": ("Medicalized Living", [
         "Multiple medications begin; side effects stack quietly",
         "Sleep fragments; fatigue becomes baseline",
@@ -240,74 +294,121 @@ LEFT_STAGE = {
         "Pain management replaces performance",
     ]),
     "50-55": ("Medicalized Living", [
-        "Multiple medications begin; side effects stack quietly",
-        "Sleep fragments; fatigue becomes baseline",
-        "Movement becomes cautious; joints “protected”",
-        "Pain management replaces performance",
+        "Conditions collect: metabolic, joints, mood, sleep",
+        "Strength drops; falls risk begins to rise",
+        "Social range narrows with energy",
+        "More appointments; less capacity",
+    ]),
+    "55-60": ("Medicalized Living", [
+        "Polypharmacy becomes common; tradeoffs increase",
+        "Balance declines if untrained",
+        "Recovery becomes slow; setbacks compound",
+        "Independence starts to feel fragile",
+    ]),
+    "60-65": ("Medicalized Living", [
+        "Hospital visits become more likely events",
+        "Mobility shrinks; stairs become a barrier",
+        "Sarcopenia accelerates without resistance training",
+        "Fear of injury limits activity further",
+    ]),
+    "65-70": ("Frail Transition", [
+        "Falls become a turning point risk",
+        "Frailty arrives sooner than expected",
+        "Care needs increase; independence declines",
+        "Life becomes smaller and more cautious",
+    ]),
+    "70-75": ("Frail", [
+        "Capacity drops steeply; reserves are thin",
+        "Chronic conditions drive daily decisions",
+        "Simple tasks require planning and help",
+        "More time managing health than living life",
+    ]),
+    "75-80": ("Frail", [
+        "High risk of hospitalization and cascade decline",
+        "Assistive devices become common",
+        "Loss of autonomy becomes real",
+        "Caregiver dependence increases",
     ]),
 }
+
 RIGHT_STAGE = {
-    "45-50": ("Managing conditions", "Adjust meds; reduce risk"),
-    "50-55": ("Managing conditions", "Adjust meds; reduce risk"),
+    "0-5": ("Set the trajectory early", "Protect sleep; build active play; limit ultra-processed foods"),
+    "5-10": ("Keep movement daily", "Sports + play + strength basics; build simple routines"),
+    "10-15": ("Prevent the slide", "Strength + sleep + protein; reduce sugar and screens"),
+    "15-20": ("Build the base", "Train strength; develop Zone 2; make sleep non-negotiable"),
+    "20-25": ("Guard against drift", "Consistency beats intensity; lift + walk + sleep"),
+    "25-30": ("Stop the quiet decline", "Strength 2–3x/wk; Zone 2; reduce alcohol; track labs"),
+    "30-35": ("Reverse early compounding", "Progressive strength; protein; steps; stress hygiene"),
+    "35-40": ("Reclaim capacity", "Strength + balance + VO₂ work; simplify nutrition"),
+    "40-45": ("Intervene decisively", "Train like medicine; fix sleep; reduce visceral fat"),
+    "45-50": ("Rebuild the engine", "Strength + Zone 2; manage stress; monitor biomarkers"),
+    "50-55": ("Prevent cascade", "Strength + mobility + balance; simplify meds; protect sleep"),
+    "55-60": ("Maintain independence", "Train legs + balance; protein; fall-proof your life"),
+    "60-65": ("Protect autonomy", "Strength + gait + balance; social + purpose"),
+    "65-70": ("Delay frailty", "High-value training; prevent falls; simplify obligations"),
+    "70-75": ("Preserve function", "Small daily wins; safe strength; support systems"),
+    "75-80": ("Reduce risk", "Fall prevention; mobility support; maintain routines"),
 }
 
 # -----------------------------
 # Header
 # -----------------------------
 st.markdown('<div class="h1">A Standard American Life — Health Timeline</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub">What happens if nothing intervenes</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub">The default path — gradual drift, then compounding decline</div>', unsafe_allow_html=True)
 
 # -----------------------------
-# Band navigation (arrows tight to band label)
+# Band navigation (true centered grouping)
 # -----------------------------
 if "age" not in st.session_state:
-    st.session_state.age = 47  # in the 45–50 band
+    st.session_state.age = 22  # 20–25
 
-b1, b2, b3 = st.columns([1, 1, 1])
-with b1:
-    st.write("")
-with b2:
-    left_btn, band_mid, right_btn = st.columns([1, 2, 1])
-    with left_btn:
-        st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-        if st.button("←", key="prev_band"):
-            st.session_state.age = max(5, st.session_state.age - 5)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with band_mid:
-        band = band_label_for_age(st.session_state.age)
-        st.markdown(f"<div class='bandbar'><div class='bandpill'>{band}</div></div>", unsafe_allow_html=True)
-    with right_btn:
-        st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-        if st.button("→", key="next_band"):
-            st.session_state.age = min(92, st.session_state.age + 5)
-        st.markdown("</div>", unsafe_allow_html=True)
-with b3:
-    st.write("")
+# Make a 5-column row so the center group is perfectly centered on the page
+g1, g2, g3, g4, g5 = st.columns([2.2, 0.8, 1.2, 0.8, 2.2], vertical_alignment="center")
+
+with g2:
+    st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
+    if st.button("←", key="prev_band"):
+        st.session_state.age = max(0, st.session_state.age - 5)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with g3:
+    band = band_label_for_age(st.session_state.age)
+    st.markdown(f"<div class='bandrow'><div class='bandpill'>{band}</div></div>", unsafe_allow_html=True)
+
+with g4:
+    st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
+    if st.button("→", key="next_band"):
+        st.session_state.age = min(92, st.session_state.age + 5)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 age = st.session_state.age
 band = band_label_for_age(age)
 
 # -----------------------------
-# Values (no UI controls)
+# Values
 # -----------------------------
-conditioning = 0  # keep stable for now; later we’ll add LRP controls on the same row (right side)
 base = sal_capacity(age)
-zone_score = clamp(base + conditioning, 0, 100)
-zone_color = label_zone(zone_score)
+zone_score = clamp(base, 0, 100)
 
-engine_name, engine_color = engine_status_from_age_for_sal(age)
+zone_color = fit_zone_color_for_sal(age)  # SAL rule (age-driven)
+engine_name, engine_color = check_engine_color_for_sal(age)
 
 # Copy
 left_title, left_bullets = LEFT_STAGE.get(
     band,
-    ("Standard Living", ["Placeholder bullet 1", "Placeholder bullet 2", "Placeholder bullet 3", "Placeholder bullet 4"])
+    ("Standard Living", [
+        "Health drifts quietly without a plan",
+        "Strength fades if untrained",
+        "Sleep degrades under stress",
+        "Food environment wins by default",
+    ])
 )
-diag_text, rx_text = RIGHT_STAGE.get(band, ("Managing conditions", "Adjust meds; reduce risk"))
+diag_text, rx_text = RIGHT_STAGE.get(band, ("Know your baseline", "Small levers → big compounding"))
 
 # -----------------------------
-# Layout (wider chart + tight sides)
+# Layout
 # -----------------------------
-colL, colC, colR = st.columns([1.0, 2.55, 1.0], gap="large")
+colL, colC, colR = st.columns([1.05, 2.70, 1.05], gap="large")
 
 with colL:
     bullets_html = "".join([f"<div class='b'><div class='dot'></div><div>{t}</div></div>" for t in left_bullets])
@@ -329,15 +430,13 @@ with colC:
     seg_x = np.arange(a0, min(a0 + 5, 77) + 1, 1)
     seg_y = np.array([sal_capacity(x) for x in seg_x])
 
-    fig, ax = plt.subplots(figsize=(10.6, 5.7), dpi=140)
+    fig, ax = plt.subplots(figsize=(11.0, 5.8), dpi=140)
     fig.patch.set_alpha(0)
     ax.set_facecolor((0, 0, 0, 0))
 
-    # pale curve + red segment
     ax.plot(xs, ys, linewidth=3.8, color=(0.76, 0.54, 0.54, 0.55))
     ax.plot(seg_x, seg_y, linewidth=5.0, color=(0.67, 0.10, 0.10, 0.95))
 
-    # end marker
     ax.axvline(77, linewidth=3.2, color=(0, 0, 0, 0.22))
 
     ax.set_xlim(0, 77)
@@ -386,7 +485,7 @@ with colR:
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # Combined: Check Engine + Fit Zone
+    # Check Engine + Fit Zone (Fit Zone text removed per your request)
     st.markdown(
         f"""
 <div class="card">
@@ -394,10 +493,10 @@ with colR:
     <div>{engine_svg(engine_color)}</div>
     <div>
       <p class="kpi-title">Check Engine</p>
-      <div class="small" style="font-size:18px; font-weight:800;">
-        <span style="color:{engine_color};">●</span> {engine_name}
+      <div class="small" style="font-size:18px; font-weight:800; color:{engine_color};">
+        {engine_name}
       </div>
-      <div class="kpi-sub">SAL: age-driven early; risk compounds later</div>
+      <div class="kpi-sub">Yellow at 30–45; red from 45 onward</div>
     </div>
   </div>
 
@@ -406,8 +505,8 @@ with colR:
   <div class="kpi-row">
     <div style="width:44px;height:44px;border-radius:999px;background:{zone_color};opacity:0.92;"></div>
     <div>
-      <p class="kpi-title">Fit Zone</p>
       <div class="kpi-sub">Zone score: <b>{zone_score:.1f}</b></div>
+      <div class="kpi-sub">Yellow at 20–30; red from 30 onward</div>
     </div>
   </div>
 </div>
