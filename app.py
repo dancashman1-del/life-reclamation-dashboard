@@ -1,440 +1,470 @@
+import math
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 
+# ------------------------------------------------------------
+# Page
+# ------------------------------------------------------------
 st.set_page_config(page_title="Life Timeline", page_icon="🧭", layout="wide")
 
-# -----------------------------
-# Background (parchment + 2-layer mountains; darker; rises to the right)
-# -----------------------------
-MOUNTAINS_SVG = """
-<svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-  <path d="M0,260
-           C140,235 270,250 380,220
-           C520,180 610,215 740,185
-           C880,150 980,210 1090,165
-           C1150,140 1185,130 1200,120
-           L1200,320 L0,320 Z"
-        fill="rgba(0,0,0,0.080)"/>
-  <path d="M0,295
-           C160,270 290,300 410,265
-           C540,230 650,285 790,240
-           C925,200 1000,275 1120,215
-           C1170,185 1190,170 1200,150
-           L1200,320 L0,320 Z"
-        fill="rgba(0,0,0,0.165)"/>
-</svg>
-"""
+# ------------------------------------------------------------
+# Bands
+# ------------------------------------------------------------
+SAL_BANDS = [
+    (0, 5),
+    (5, 10),
+    (10, 15),
+    (15, 20),
+    (20, 25),
+    (25, 30),
+    (30, 35),
+    (35, 40),
+    (40, 45),
+    (45, 50),
+    (50, 55),
+    (55, 60),
+    (60, 65),
+    (65, 70),
+    (70, 75),
+    (75, 77),
+]
 
-def engine_svg(color_hex: str, size: int = 62) -> str:
-    return f"""
-<svg width="{size}" height="{size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <path d="M22 18h18l4 6h6v8h-4l-2 6h-2v8H22v-6h-6v-8h4l2-6h2z"
-        fill="{color_hex}" opacity="0.98"/>
-  <path d="M24 28h16v16H24z" fill="white" opacity="0.22"/>
+LRP_BANDS = [
+    (55, 60),
+    (60, 65),
+    (65, 70),
+    (70, 75),
+    (75, 80),
+    (80, 85),
+    (85, 90),
+    (90, 92),
+]
+
+
+def band_label(a, b):
+    return f"{a}-{b}"
+
+
+# ------------------------------------------------------------
+# Background: parchment + darker rolling mountains (two layers, higher on right)
+# ------------------------------------------------------------
+MOUNTAINS = """
+<svg viewBox="0 0 1200 280" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+  <!-- back (lighter) range -->
+  <path d="M0,225
+           C140,210 260,230 380,205
+           C520,175 640,230 760,200
+           C900,160 1020,235 1200,175
+           L1200,280 L0,280 Z"
+        fill="rgba(0,0,0,0.06)"/>
+
+  <!-- front (darker) range - rises to the right -->
+  <path d="M0,255
+           C150,245 280,265 420,240
+           C560,210 660,260 800,225
+           C930,190 1030,250 1200,205
+           L1200,280 L0,280 Z"
+        fill="rgba(0,0,0,0.12)"/>
 </svg>
 """
 
 st.markdown(
     f"""
 <style>
+:root {{
+  --paper: #fbf6ee;
+  --paper2: #f6efe4;
+  --ink: #1e1e1e;
+  --muted: rgba(30,30,30,0.62);
+  --card: rgba(255,255,255,0.88);
+  --cardBorder: rgba(0,0,0,0.08);
+  --shadow: 0 16px 40px rgba(0,0,0,0.10);
+  --salLine: rgba(140, 60, 60, 0.28);
+  --salLineStrong: rgba(150, 35, 35, 0.85);
+  --lrpLine: rgba(25, 120, 70, 0.30);
+  --lrpLineStrong: rgba(20, 120, 70, 0.80);
+}}
+
 .stApp {{
   background:
-    radial-gradient(900px 520px at 20% 0%, rgba(0,0,0,0.05), rgba(0,0,0,0.00) 60%),
-    linear-gradient(180deg, #fbf7ef 0%, #f7f1e6 100%);
-  color: #1f1f1f;
+    radial-gradient(1000px 520px at 10% 0%, rgba(0,0,0,0.04), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper2) 100%);
+  color: var(--ink);
 }}
-.lrp-mountains {{
+
+.mtn {{
   position: fixed;
-  left: 0; right: 0; bottom: -18px;
-  height: 290px;
+  left: 0; right: 0; bottom: 0;
+  height: 220px;
   pointer-events: none;
-  opacity: 0.93;
-  z-index: 0;
+  opacity: 0.84; /* ~10% darker overall */
 }}
-.block-container {{
-  position: relative;
-  z-index: 1;
-  padding-bottom: 190px;
-  max-width: 1700px;
-  padding-top: 0.8rem;
+
+.headerWrap {{
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 8px;
 }}
 
 .h1 {{
-  font-size: 42px;
+  font-size: 44px;
   font-weight: 900;
   letter-spacing: -0.02em;
-  text-align: center;
-  margin: 6px 0 0 0;
-}}
-.sub {{
-  text-align: center;
-  font-size: 18px;
-  opacity: 0.70;
-  margin: 4px 0 10px 0;
+  margin: 0;
 }}
 
-.card {{
-  border-radius: 18px;
-  background: rgba(255,255,255,0.93);
-  border: 1px solid rgba(0,0,0,0.08);
-  padding: 18px;
-  box-shadow: 0 10px 28px rgba(0,0,0,0.06);
-}}
-.card h3 {{
-  margin: 0 0 10px 0;
-  font-size: 22px;
-}}
-.small {{
-  font-size: 14px;
-  opacity: 0.82;
+.h2 {{
+  font-size: 16px;
+  color: var(--muted);
+  margin-top: 6px;
 }}
 
-.bullets {{
-  display: grid;
-  grid-template-columns: 1fr;   /* single column */
-  gap: 10px;
-  font-size: 18px;
-  line-height: 1.25;
-}}
-.bullets .b {{
-  display: flex;
-  gap: 10px;
-}}
-.dot {{
-  width: 9px;
-  height: 9px;
-  border-radius: 99px;
-  background: rgba(0,0,0,0.55);
-  margin-top: 8px;
-  flex: 0 0 9px;
-}}
-
-.hdr {{
+.navRow {{
   display:flex;
   align-items:center;
-  gap: 10px;
-}}
-.hdr .ico {{
-  width: 28px; height: 28px;
-  display:flex; align-items:center; justify-content:center;
-  border-radius: 8px;
-  background: rgba(0,0,0,0.05);
-  font-weight: 800;
-}}
-
-.navbtn > div > button {{
-  border-radius: 14px !important;
-  padding: 6px 12px !important;
-  border: 1px solid rgba(0,0,0,0.10) !important;
-  background: rgba(255,255,255,0.92) !important;
+  justify-content:center;
+  gap: 14px;
+  margin: 12px 0 6px 0;
 }}
 
 .pill {{
-  display:inline-block;
-  font-size: 18px;
-  font-weight: 850;
   padding: 8px 14px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.75);
-  border: 1px solid rgba(0,0,0,0.08);
-}}
-.pill-dark {{
-  background: rgba(0,0,0,0.04);
+  background: rgba(255,255,255,0.65);
+  border: 1px solid var(--cardBorder);
+  font-weight: 700;
 }}
 
-.sep {{
-  height:1px;
-  background:rgba(0,0,0,0.08);
-  margin: 14px 0;
+.card {{
+  background: var(--card);
+  border: 1px solid var(--cardBorder);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 18px 18px;
 }}
 
-.kpi-title {{
-  font-size: 16px;
+.cardTitle {{
+  font-size: 22px;
   font-weight: 900;
   margin: 0 0 10px 0;
+  line-height: 1.05;
 }}
-.kpi-row {{
+
+.bullets {{
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(30,30,30,0.88);
+  font-size: 16px;
+  line-height: 1.45;
+}}
+
+.smallIconBox {{
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
   display:flex;
-  gap: 14px;
   align-items:center;
+  justify-content:center;
+  border: 2px solid rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.60);
 }}
-.kpi-sub {{
+
+.dot {{
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.10);
+}}
+
+.gRow {{
+  display:flex;
+  align-items:center;
+  gap: 14px;
+  margin-top: 12px;
+}}
+
+.gLabel {{
+  font-weight: 900;
+  font-size: 16px;
+  margin-bottom: 2px;
+}}
+
+.gHint {{
+  color: var(--muted);
   font-size: 13px;
-  opacity: 0.72;
-  margin-top: 4px;
+  line-height: 1.2;
+}}
+
+hr.sep {{
+  border: none;
+  height: 1px;
+  background: rgba(0,0,0,0.08);
+  margin: 14px 0;
 }}
 </style>
 
-<div class="lrp-mountains">{MOUNTAINS_SVG}</div>
+<div class="mtn">{MOUNTAINS}</div>
 """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def band_label_for_age(age: int) -> str:
-    a0 = (age // 5) * 5
-    a1 = a0 + 5
-    a0 = max(0, a0)
-    a1 = min(95, a1)
-    return f"{a0}-{a1}"
-
-# -----------------------------
-# SAL curve (ends ~12 at 77)
-# -----------------------------
+# ------------------------------------------------------------
+# Curves (SAL + LRP)
+# We model capacity on 0–100 where:
+# 70+ = Fit, 40–70 = Functional, <40 = Frail
+# ------------------------------------------------------------
 def sal_capacity(age: float) -> float:
-    pts = np.array([
-        [0,  88],
-        [15, 86],
-        [25, 80],
-        [35, 73],
-        [45, 66],
-        [50, 55],
-        [55, 48],
-        [60, 42],
-        [65, 36],
-        [70, 26],
-        [75, 16],
-        [77, 12],
-    ], dtype=float)
-    return float(np.interp(age, pts[:, 0], pts[:, 1]))
+    """
+    SAL curve: mostly Fit early, crosses into Functional around ~50,
+    then compounds downward with steeper late-life decline, ending at 77.
+    """
+    # Base drift
+    # Start near 82, slow drift to ~55 by ~50, then compounding.
+    if age <= 18:
+        y = 78 - 0.05 * age
+    elif age <= 45:
+        y = 77 - 0.42 * (age - 18)  # down into low 60s by mid-40s
+    elif age <= 50:
+        y = 65 - 1.8 * (age - 45)   # sharper drop into Functional by 50
+    elif age <= 65:
+        y = 56 - 1.25 * (age - 50)
+    elif age <= 72:
+        y = 37 - 2.3 * (age - 65)
+    else:
+        y = 21 - 3.2 * (age - 72)
 
-# LRP curve (peaks near 60, stays functional at 92)
+    return float(max(6, min(90, y)))
+
+
 def lrp_capacity(age: float) -> float:
-    pts = np.array([
-        [55, 55],
-        [60, 78],
-        [70, 74],
-        [75, 70],
-        [80, 62],
-        [85, 58],
-        [92, 55],
-    ], dtype=float)
-    return float(np.interp(age, pts[:, 0], pts[:, 1]))
+    """
+    LRP: intervention starts ~55, rapid gains by ~60, then slow decline,
+    finishing at the bottom end of Functional at 92.
+    """
+    # Before 55, LRP is not shown (handled by plotting logic)
+    # Segment: 55->60 improvement to peak
+    if age <= 60:
+        # start around 52 at 55, peak ~78 at 60
+        t = (age - 55) / 5.0
+        y = 52 + t * (78 - 52)
+    else:
+        # gradual decline to ~40 by 92
+        t = (age - 60) / (92 - 60)
+        y = 78 - t * (78 - 40)
 
-# -----------------------------
-# SAL color rules (your rules)
-# Zone: yellow 20–30; red 30+
-# Engine: yellow 30–45; red 45–77
-# -----------------------------
-def sal_zone_color(age: float) -> str:
+    return float(max(10, min(92, y)))
+
+
+# ------------------------------------------------------------
+# Color logic for SAL/LRP "Check Engine" and "Fitness Zone"
+# (No numbers shown—only icon color)
+# ------------------------------------------------------------
+def sal_fitness_zone_color(age: int) -> str:
+    # Per your spec: Yellow at 20–25, Red from 30–35 onward
     if age < 20:
-        return "#39b66a"
+        return "#3db86a"  # green
     if age < 30:
-        return "#d6a400"
-    if age < 50:
-        return "#c63b3b"
-    return "#9d1f1f"
+        return "#d4a400"  # yellow/amber
+    return "#b03030"      # red
 
-def sal_engine_color(age: float) -> str:
+
+def sal_check_engine_color(age: int) -> str:
+    # Delayed vs zone: Yellow at 30–45, Red from 45–77
     if age < 30:
-        return "#39b66a"
+        return "#3db86a"
     if age < 45:
-        return "#d6a400"
-    return "#c63b3b"
+        return "#d4a400"
+    return "#b03030"
 
-# LRP band controls
-LRP_BANDS = ["55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85-90", "90-92"]
 
-def band_start(b: str) -> int:
-    return int(b.split("-")[0])
+def lrp_fitness_zone_color(age: int) -> str:
+    # LRP generally green; allow slight amber late if you want later.
+    if age < 85:
+        return "#3db86a"
+    return "#5aa86e"  # still green-ish
 
-def band_end(b: str) -> int:
-    return int(b.split("-")[1])
 
-# LRP colors (display-only)
-def lrp_engine_color_for_band(band: str) -> str:
-    idx = LRP_BANDS.index(band)
-    if idx <= 5:
-        return "#39b66a"
-    if idx == 6:
-        return "#d6a400"
-    return "#c63b3b"
+def lrp_check_engine_color(age: int) -> str:
+    if age < 85:
+        return "#3db86a"
+    return "#5aa86e"
 
-def lrp_zone_color_for_band(band: str) -> str:
-    idx = LRP_BANDS.index(band)
-    if idx <= 5:
-        return "#39b66a"
-    if idx == 6:
-        return "#d6a400"
-    return "#c63b3b"
 
-# -----------------------------
-# Copy: SAL titles more descriptive (short, readable)
-# -----------------------------
-SAL_LEFT_STAGE = {
-    "0-5":  ("Built to Move\n(natural training)", [
+# ------------------------------------------------------------
+# Copy: Left panel titles + bullets (SAL + LRP)
+# (Bullets are single-column, one per line)
+# ------------------------------------------------------------
+SAL_LEFT = {
+    "0-5":  ("Built to Move (natural training)", [
         "Movement is natural; play provides daily training",
-        "Sleep is abundant; recovery is effortless",
+        "Sleep is abundant; recovery feels effortless",
         "Food habits form early; sugar normalizes fast",
         "Screens begin to replace outdoor hours",
     ]),
-    "5-10": ("Sitting Starts\n(activity narrows)", [
+    "5-10": ("Sitting Starts (activity narrows)", [
         "Recess still helps; sitting begins to dominate",
         "Sports become seasonal—not daily movement",
         "Ultra-processed snacks become routine",
         "Sleep starts slipping as schedules grow",
     ]),
-    "10-15": ("Teen Drift\n(mobility tightens)", [
-        "Activity drops; posture and mobility tighten",
-        "Social stress rises; comfort eating increases",
-        "Strength work is rare; peak potential is missed",
-        "Sleep becomes inconsistent; energy dips appear",
+    "10-15": ("Teen Drift (comfort wins)", [
+        "Movement gets optional; screens become default",
+        "Food becomes engineered—high reward, low satiety",
+        "Stress rises; sleep gets irregular",
+        "Purpose is thin; distraction fills the gap",
     ]),
-    "15-20": ("Sedentary Default\n(screens win)", [
-        "Sedentary time spikes; screens win the day",
-        "Fast food + sugar drinks feel “normal”",
-        "Injuries linger without strength foundations",
-        "Sleep debt becomes lifestyle",
+    "15-20": ("Launch Years (habits lock in)", [
+        "Late nights; sleep debt becomes normal",
+        "Cheap calories beat real food",
+        "Training stops; fitness becomes “for athletes”",
+        "Money stress nudges comfort-eating + screens",
     ]),
-    "20-25": ("Early Decline\n(quiet erosion)", [
+    "20-25": ("Adulting Begins (quiet decline)", [
         "Energy drops; “no time” becomes the reason",
-        "Muscle loss starts; strength training is absent",
         "Stress climbs; sleep quality erodes",
-        "Biomarkers start drifting—unnoticed",
+        "Muscle loss starts; strength training is absent",
+        "Budget habits + convenience steer food choices",
     ]),
-    "25-30": ("Weight Creep\n(consistency fades)", [
-        "Weight gain begins quietly",
-        "Fitness becomes optional; consistency fades",
-        "Alcohol + late nights blunt recovery",
-        "Sitting becomes the default posture",
+    "25-30": ("Work Wins (health waits)", [
+        "Fitness becomes occasional, not consistent",
+        "Weight creeps; back/hip issues appear",
+        "Fast food + alcohol normalize socially",
+        "Purpose feels postponed; anxiety hums",
     ]),
-    "30-35": ("Metabolic Slide\n(inflammation rises)", [
-        "Metabolic health slips; inflammation rises",
-        "Back/hip/shoulder issues become common",
-        "Fat gain accelerates; muscle loss continues",
-        "Cardio fitness falls below daily needs",
+    "30-35": ("Baseline Shifts (subtle warning)", [
+        "Cardio capacity falls below daily needs",
+        "More inflammation; recovery slows",
+        "Doctor says: “Try to eat better.”",
+        "Financial pressure keeps “healthy” expensive",
     ]),
-    "35-40": ("Chronic “Normal”\n(aches + fatigue)", [
-        "Chronic aches become “normal” baseline",
-        "Blood pressure/markers creep upward",
-        "Recovery slows; setbacks linger",
-        "Stress becomes constant background noise",
+    "35-40": ("Compounding (more sitting)", [
+        "Metabolic health slips; fatigue becomes normal",
+        "Strength fades if untrained",
+        "Sleep degrades under stress",
+        "Food environment wins by default",
     ]),
-    "40-45": ("Warning Signs\n(labs creep up)", [
-        "First real warning signs appear on labs",
-        "Sleep apnea risk rises; fatigue persists",
-        "Movement becomes cautious; joints “protected”",
-        "Motivation drops; habits calcify",
-    ]),
-    "45-50": ("Medicalized Living\n(meds begin)", [
-        "Multiple medications begin; side effects stack quietly",
-        "Sleep fragments; fatigue becomes baseline",
+    "40-45": ("First Labels (borderline)", [
+        "Labs drift; risk starts to show",
         "Pain management replaces performance",
-        "Capacity drops; life becomes smaller",
+        "Short-term relief beats long-term plan",
+        "Stress + screens crowd out movement",
     ]),
-    "50-55": ("Conditions Collect\n(appointments rise)", [
-        "Conditions collect: metabolic, joints, mood, sleep",
-        "Strength drops; fall risk starts rising",
-        "More appointments; less capacity",
-        "“Normal for your age” becomes the refrain",
+    "45-50": ("Medicalized Living (conditions)", [
+        "Multiple meds begin; side effects stack quietly",
+        "Movement gets cautious; joints feel “protected”",
+        "Sleep fragments; fatigue becomes baseline",
+        "Money stress rises as health costs rise",
     ]),
-    "55-60": ("Polypharmacy Risk\n(tradeoffs grow)", [
-        "Polypharmacy becomes common; tradeoffs increase",
-        "Balance declines if untrained",
-        "Recovery slows; setbacks compound",
-        "Independence starts to feel fragile",
+    "50-55": ("Lower Ceiling (shrinking capacity)", [
+        "Stairs feel harder; breath comes sooner",
+        "Injuries linger; recovery slows",
+        "Doctor says: “We’ll watch it.”",
+        "Vacations become rest, not adventure",
     ]),
-    "60-65": ("Mobility Shrinks\n(stairs become a barrier)", [
-        "Hospital visits become more likely events",
-        "Mobility shrinks; stairs become a barrier",
-        "Sarcopenia accelerates without strength work",
-        "Fear of injury limits activity further",
+    "55-60": ("Maintenance Mode (manage)", [
+        "More prescriptions; fewer capabilities",
+        "Strength loss accelerates without training",
+        "Social life becomes more sedentary",
+        "Purpose narrows to obligations",
     ]),
-    "65-70": ("Frail Transition\n(falls become pivotal)", [
-        "Falls become a turning-point risk",
-        "Frailty arrives sooner than expected",
-        "Care needs increase; independence declines",
-        "Life becomes smaller and more cautious",
+    "60-65": ("Risk Stacks (quietly)", [
+        "More diagnoses; more follow-ups",
+        "Falls feel “possible” now",
+        "Mobility shrinks; confidence shrinks",
+        "You start avoiding what you used to do",
     ]),
-    "70-75": ("Frail\n(reserves are thin)", [
-        "Capacity drops steeply; reserves are thin",
-        "Chronic conditions drive daily decisions",
-        "Simple tasks require planning and help",
-        "More time managing health than living life",
+    "65-70": ("Safety First (fragility)", [
+        "Less spontaneity; more caution",
+        "Muscle loss shows up everywhere",
+        "Daily chores take more effort",
+        "Medical visits become the rhythm",
     ]),
-    "75-80": ("Frail\n(cascade decline risk)", [
-        "High risk of hospitalization + cascade decline",
-        "Assistive devices become common",
-        "Loss of autonomy becomes real",
-        "Caregiver dependence increases",
+    "70-75": ("Frail Horizon (losses)", [
+        "Independence wobbles",
+        "Pain management becomes central",
+        "Social circle shrinks; isolation rises",
+        "The “default” feels inevitable",
+    ]),
+    "75-77": ("The Wall (too late)", [
+        "A cascade event becomes likely",
+        "Function drops fast once it drops",
+        "Life gets smaller",
+        "The cost—time, money, meaning—shows up",
     ]),
 }
 
-SAL_RIGHT_STAGE = {
-    "0-5":  ("“Nothing to worry about.”", "“They’ll grow out of it.”"),
-    "5-10": ("“Kids bounce back.”", "“Just keep them busy.”"),
-    "10-15": ("“Normal teenager stuff.”", "“Try to sleep more.”"),
-    "15-20": ("“It’s stress.”", "“Do your best.”"),
-    "20-25": ("“You’re young. You’re fine.”", "“Maybe walk more.”"),
-    "25-30": ("“A little burnout.”", "“Try to get more sleep.”"),
-    "30-35": ("“Welcome to your 30s.”", "“Diet and exercise.” (no plan)"),
-    "35-40": ("“Borderline, but not urgent.”", "“We’ll watch it.”"),
-    "40-45": ("“Common these days.”", "“Let’s check again next year.”"),
-    "45-50": ("“Nothing serious—yet.”", "“Start a med to be safe.”"),
-    "50-55": ("“Manage your conditions.”", "“Add meds one by one.”"),
-    "55-60": ("“This is typical for your age.”", "“Adjust meds; reduce risk.”"),
-    "60-65": ("“Stability is the goal.”", "“Treat symptoms as they appear.”"),
-    "65-70": ("“Focus on safety.”", "“PT when needed; prevent falls.”"),
-    "70-75": ("“Keep you comfortable.”", "“More meds; support as needed.”"),
-    "75-80": ("“Do what you can.”", "“Assistive devices; supportive care.”"),
-}
-
-# LRP: titles should NOT repeat the same header; make them band-specific and punchy
-LRP_LEFT_STAGE = {
-    "55-60": ("RAMP: Reversal Phase\n(rapid turnaround)", [
+LRP_LEFT = {
+    "55-60": ("Reclamation Begins (first 5 years)", [
         "Strength training becomes non-negotiable",
         "Zone 2 base rebuilt; hiking feels easier",
-        "Sleep regularized; mornings become powerful",
-        "Risk downshifts: cancer, autoimmune, Alzheimer’s risk ↓ vs SAL",
+        "Sleep regularized; mornings feel powerful",
+        "Real food replaces “dieting”",
     ]),
-    "60-65": ("RAMP: Momentum\n(resilience compounds)", [
-        "Capacity stays high; resilience grows",
-        "Balance + mobility become deliberate training",
-        "Labs improve; inflammation trends down",
-        "Purpose expands: adventures, projects, people",
+    "60-65": ("Momentum (vitality compounds)", [
+        "Consistency becomes identity",
+        "Bloodwork trends younger",
+        "Mobility + balance become daily",
+        "Purpose grows; stress falls",
     ]),
-    "65-70": ("RAMP: The Outlier\n(strong legs, strong life)", [
-        "You become the outlier in your peer group",
-        "Leg strength + gait protect independence",
-        "HIIT is strategic, not punishing",
-        "Consistency beats intensity—again and again",
+    "65-70": ("Outlier Status (function stays high)", [
+        "Stairs, hills, travel feel normal again",
+        "Strength protects joints + confidence",
+        "Community + sport keep you moving",
+        "Cancer/metabolic risk keeps dropping",
     ]),
-    "70-75": ("RAMP: High Function\n(independence intact)", [
-        "Still hiking, still traveling, still strong",
-        "Falls prevention is a top priority",
-        "Community + purpose stay active",
-        "Recovery rituals protect the engine",
+    "70-75": ("Durability (independence protected)", [
+        "Leg strength + balance prevent falls",
+        "Recovery stays strong with sleep + protein",
+        "Adventure remains on the calendar",
+        "Your world stays big",
     ]),
-    "75-80": ("RAMP: Preserve Autonomy\n(life stays big)", [
-        "Independence preserved; life stays big",
-        "Daily movement becomes identity",
-        "Strength stays in the program",
-        "Healthspan is still the mission",
-    ]),
-    "80-85": ("RAMP: Simplify & Sustain\n(safe consistency)", [
-        "Still capable; still engaged",
-        "Simple routines, executed consistently",
-        "Strength + gait + balance maintained",
-        "Joy, connection, and meaning stay central",
-    ]),
-    "85-90": ("RAMP: Compressed Morbidity\n(planned support)", [
-        "Compressed morbidity becomes real",
-        "Support is planned—not reactive",
-        "Movement continues, safely",
-        "Legacy and love rise in priority",
-    ]),
-    "90-92": ("RAMP: Finish Strong\n(present + functional)", [
-        "Finishing strong—functional and present",
-        "Small daily wins keep the system stable",
-        "Sleep and connection remain core",
+    "75-80": ("High Function (small wins daily)", [
+        "Training is simpler—but steady",
+        "You walk farther than peers",
+        "You choose effort on purpose",
         "The view is grander than the climb",
+    ]),
+    "80-85": ("Freedom (still capable)", [
+        "You keep routines safe + consistent",
+        "Strength preserves autonomy",
+        "Connection reduces stress physiology",
+        "You keep saying “yes” to life",
+    ]),
+    "85-90": ("Compressed Morbidity (still thriving)", [
+        "You move daily—no heroics",
+        "You protect sleep relentlessly",
+        "You stay engaged with people + place",
+        "Function stays in the game",
+    ]),
+    "90-92": ("Finishing Strong (essentials)", [
+        "Movement, connection, sleep—core",
+        "You keep it simple and safe",
+        "Joy stays present",
+        "You end functional—not fragile",
     ]),
 }
 
-LRP_RIGHT_STAGE = {
+SAL_RIGHT = {
+    "0-5":  ("“Nothing to worry about.”", "“They’ll grow out of it.”"),
+    "5-10": ("“Kids bounce back.”", "“Just keep them busy.”"),
+    "10-15": ("“It’s a phase.”", "“Try to cut down on snacks.”"),
+    "15-20": ("“Normal stress.”", "“Get more sleep if you can.”"),
+    "20-25": ("“You’re fine.”", "“Carry on.”"),
+    "25-30": ("“A little stress.”", "“Maybe walk more.”"),
+    "30-35": ("“Borderline.”", "“Diet and exercise.”"),
+    "35-40": ("“Common for your age.”", "“We’ll watch it.”"),
+    "40-45": ("“Nothing urgent.”", "“Follow up next year.”"),
+    "45-50": ("“Manage conditions.”", "“Start meds as needed.”"),
+    "50-55": ("“It happens.”", "“Adjust meds; reduce risk.”"),
+    "55-60": ("“Let’s manage this.”", "“Add meds; treat symptoms.”"),
+    "60-65": ("“Stabilize.”", "“More meds, more monitoring.”"),
+    "65-70": ("“Prevent falls.”", "“PT referral; reduce risk.”"),
+    "70-75": ("“Keep you safe.”", "“Supportive care.”"),
+    "75-77": ("“Comfort and safety.”", "“More meds; fewer risks.”"),
+}
+
+LRP_RIGHT = {
     "55-60": ("Doctor is stunned — keep doing whatever you're doing.",
               "Self-initiated strength + Zone 2 + HIIT; 95% real-food; protect sleep."),
     "60-65": ("Labs look younger than your age.",
@@ -453,247 +483,277 @@ LRP_RIGHT_STAGE = {
               "Movement, connection, sleep — the essentials."),
 }
 
-# -----------------------------
-# Session state
-# -----------------------------
-if "sal_age" not in st.session_state:
-    st.session_state.sal_age = 55
-if "lrp_on" not in st.session_state:
-    st.session_state.lrp_on = True
+SAL_SUBHEAD = {
+    "0-5":  "The default path — comfort first, movement fades quietly",
+    "5-10": "The default path — more sitting, more snacks, less play",
+    "10-15":"The default path — screens replace effort; purpose thins",
+    "15-20":"The default path — stress rises; habits lock in",
+    "20-25":"The default path — quiet drift begins",
+    "25-30":"The default path — work wins; health waits",
+    "30-35":"The default path — warning signs start; you adapt downward",
+    "35-40":"The default path — compounding decline",
+    "40-45":"The default path — first labels; no real plan",
+    "45-50":"The default path — minimized early, medicated later",
+    "50-55":"The default path — capacity shrinks; life gets smaller",
+    "55-60":"The default path — manage conditions",
+    "60-65":"The default path — risk stacks quietly",
+    "65-70":"The default path — safety first",
+    "70-75":"The default path — frailty approaches",
+    "75-77":"The default path — the wall",
+}
+
+LRP_SUBHEAD = {
+    "55-60":"The intervention path — first 5 years, massive reversal",
+    "60-65":"The intervention path — consistency compounds",
+    "65-70":"The intervention path — function stays high",
+    "70-75":"The intervention path — durability protects independence",
+    "75-80":"The intervention path — small daily wins",
+    "80-85":"The intervention path — freedom through routine",
+    "85-90":"The intervention path — compressed morbidity",
+    "90-92":"The intervention path — finishing strong",
+}
+
+
+# ------------------------------------------------------------
+# Session state (prevents “stuck band” issues)
+# ------------------------------------------------------------
+if "sal_idx" not in st.session_state:
+    st.session_state.sal_idx = 0
 if "lrp_idx" not in st.session_state:
     st.session_state.lrp_idx = 0
+if "use_lrp" not in st.session_state:
+    st.session_state.use_lrp = False
 
-# -----------------------------
-# Header changes with LRP
-# -----------------------------
-sal_age = st.session_state.sal_age
-sal_band = band_label_for_age(sal_age)
 
-if st.session_state.lrp_on and sal_age >= 55:
-    title = "Life Reclamation Project — RAMP Protocol"
-    subtitle = "The intervention path — intentional living, compounding vitality"
+def clamp_indices():
+    st.session_state.sal_idx = int(max(0, min(len(SAL_BANDS) - 1, st.session_state.sal_idx)))
+    st.session_state.lrp_idx = int(max(0, min(len(LRP_BANDS) - 1, st.session_state.lrp_idx)))
+
+
+# ------------------------------------------------------------
+# Header + nav controls
+# ------------------------------------------------------------
+use_lrp = st.toggle("LRP", value=st.session_state.use_lrp, key="toggle_lrp")
+st.session_state.use_lrp = use_lrp
+
+sal_a, sal_b = SAL_BANDS[st.session_state.sal_idx]
+sal_key = band_label(sal_a, sal_b)
+
+if use_lrp:
+    lrp_a, lrp_b = LRP_BANDS[st.session_state.lrp_idx]
+    lrp_key = band_label(lrp_a, lrp_b)
 else:
-    title = "A Standard American Life — Health Timeline"
-    subtitle = "The default path — minimized early, medicated later"
+    lrp_key = None
 
-st.markdown(f'<div class="h1">{title}</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="sub">{subtitle}</div>', unsafe_allow_html=True)
+title = "Life Reclamation Project — RAMP Protocol" if use_lrp else "A Standard American Life — Health Timeline"
+subhead = (LRP_SUBHEAD.get(lrp_key) if use_lrp else SAL_SUBHEAD.get(sal_key)) or ""
 
-# -----------------------------
-# Controls row
-# -----------------------------
-c1, c2, c3, c4, c5, c6, c7 = st.columns([2.0, 0.8, 1.4, 0.8, 1.2, 1.2, 2.6], vertical_alignment="center")
-
-with c2:
-    st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-    if st.button("←", key="sal_prev"):
-        st.session_state.sal_age = max(0, st.session_state.sal_age - 5)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with c3:
-    st.markdown(f"<span class='pill'>{band_label_for_age(st.session_state.sal_age)}</span>", unsafe_allow_html=True)
-
-with c4:
-    st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-    if st.button("→", key="sal_next"):
-        st.session_state.sal_age = min(92, st.session_state.sal_age + 5)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with c6:
-    st.session_state.lrp_on = st.toggle("LRP", value=st.session_state.lrp_on)
-
-with c7:
-    if st.session_state.lrp_on:
-        l1, l2, l3 = st.columns([0.9, 1.4, 0.9], vertical_alignment="center")
-        with l1:
-            st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-            if st.button("←", key="lrp_prev"):
-                st.session_state.lrp_idx = max(0, st.session_state.lrp_idx - 1)
-            st.markdown("</div>", unsafe_allow_html=True)
-        with l2:
-            st.markdown(f"<span class='pill pill-dark'>LRP {LRP_BANDS[st.session_state.lrp_idx]}</span>", unsafe_allow_html=True)
-        with l3:
-            st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
-            if st.button("→", key="lrp_next"):
-                st.session_state.lrp_idx = min(len(LRP_BANDS) - 1, st.session_state.lrp_idx + 1)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# recompute after potential changes
-sal_age = st.session_state.sal_age
-sal_band = band_label_for_age(sal_age)
-lrp_band = LRP_BANDS[st.session_state.lrp_idx]
-
-# Copy selection
-if st.session_state.lrp_on and sal_age >= 55 and lrp_band in LRP_LEFT_STAGE:
-    left_title, left_bullets = LRP_LEFT_STAGE[lrp_band]
-    diag_text, rx_text = LRP_RIGHT_STAGE[lrp_band]
-else:
-    left_title, left_bullets = SAL_LEFT_STAGE.get(
-        sal_band,
-        ("Standard Living", [
-            "Health drifts quietly without a plan",
-            "Strength fades if untrained",
-            "Sleep degrades under stress",
-            "Food environment wins by default",
-        ])
-    )
-    diag_text, rx_text = SAL_RIGHT_STAGE.get(sal_band, ("“You’re fine.”", "“Carry on.”"))
-
-# -----------------------------
-# KPI colors
-# -----------------------------
-sal_eng_col = sal_engine_color(sal_age)
-sal_zone_col = sal_zone_color(sal_age)
-
-lrp_eng_col = lrp_engine_color_for_band(lrp_band)
-lrp_zone_col = lrp_zone_color_for_band(lrp_band)
-
-# -----------------------------
-# Layout
-# -----------------------------
-colL, colC, colR = st.columns([1.05, 2.70, 1.05], gap="large")
-
-with colL:
-    bullets_html = "".join([f"<div class='b'><div class='dot'></div><div>{t}</div></div>" for t in left_bullets])
-    st.markdown(
-        f"""
-<div class="card">
-  <h3>{left_title}</h3>
-  <div class="bullets">{bullets_html}</div>
+st.markdown(
+    f"""
+<div class="headerWrap">
+  <div class="h1">{title}</div>
+  <div class="h2">{subhead}</div>
 </div>
 """,
-        unsafe_allow_html=True,
+    unsafe_allow_html=True
+)
+
+# Band nav row (SAL always; LRP appears as separate control when toggled)
+nav_left, nav_mid, nav_right = st.columns([1, 3, 1])
+
+with nav_mid:
+    # Centered nav: SAL band
+    c1, c2, c3, c4, c5 = st.columns([1, 1.2, 0.9, 1.2, 1])
+    with c2:
+        if st.button("←", key="sal_prev_btn"):
+            st.session_state.sal_idx -= 1
+            clamp_indices()
+            st.rerun()
+    with c3:
+        st.markdown(f"<div class='pill'>{sal_key}</div>", unsafe_allow_html=True)
+    with c4:
+        if st.button("→", key="sal_next_btn"):
+            st.session_state.sal_idx += 1
+            clamp_indices()
+            st.rerun()
+
+with nav_right:
+    if use_lrp:
+        # LRP band controls on the right
+        d1, d2, d3 = st.columns([1, 2, 1])
+        with d1:
+            if st.button("←", key="lrp_prev_btn"):
+                st.session_state.lrp_idx -= 1
+                clamp_indices()
+                st.rerun()
+        with d2:
+            st.markdown(f"<div class='pill'>LRP {lrp_key}</div>", unsafe_allow_html=True)
+        with d3:
+            if st.button("→", key="lrp_next_btn"):
+                st.session_state.lrp_idx += 1
+                clamp_indices()
+                st.rerun()
+
+
+# ------------------------------------------------------------
+# Layout: left bullets, center chart, right panels
+# ------------------------------------------------------------
+left, mid, right = st.columns([1.05, 2.2, 1.05], gap="large")
+
+# Left: bullets
+with left:
+    if use_lrp and lrp_key in LRP_LEFT:
+        left_title, bullets = LRP_LEFT[lrp_key]
+    else:
+        left_title, bullets = SAL_LEFT.get(sal_key, ("Standard Living", ["(copy coming soon)"]))
+
+    st.markdown(
+        "<div class='card'>"
+        f"<div class='cardTitle'>{left_title}</div>"
+        "<ul class='bullets'>"
+        + "".join([f"<li>{b}</li>" for b in bullets])
+        + "</ul></div>",
+        unsafe_allow_html=True
     )
 
-with colC:
-    # X range changes in LRP mode (0–92) but chart pixel width stays same
-    x_max = 92 if (st.session_state.lrp_on and sal_age >= 55) else 77
+# Mid: Chart (matplotlib for precise “paper slide” look)
+with mid:
+    # X-range depends on LRP toggle
+    x_max = 92 if use_lrp else 77
 
-    # SAL curve
-    xs_sal = np.arange(0, 78, 1)
-    ys_sal = np.array([sal_capacity(x) for x in xs_sal])
+    xs = np.linspace(0, x_max, int((x_max - 0) * 4) + 1)
 
-    # Highlight segment: SAL only when NOT LRP
-    a0 = (sal_age // 5) * 5
-    seg_x = np.arange(a0, min(a0 + 5, 77) + 1, 1)
-    seg_y = np.array([sal_capacity(x) for x in seg_x])
+    # SAL plotted only to 77, even if x_max=92 (fade after death)
+    xs_sal = xs[xs <= 77]
+    ys_sal = np.array([sal_capacity(float(x)) for x in xs_sal])
 
-    fig, ax = plt.subplots(figsize=(11.2, 5.9), dpi=140)
-    fig.patch.set_alpha(0)
-    ax.set_facecolor((0, 0, 0, 0))
+    fig = plt.figure(figsize=(9.2, 5.4), dpi=140)
+    ax = fig.add_subplot(111)
 
-    ax.plot(xs_sal, ys_sal, linewidth=3.8, color=(0.76, 0.54, 0.54, 0.55))
+    # Background bands (Fit/Functional/Frail)
+    ax.axhspan(70, 100, color=(0, 0, 0, 0.03), lw=0)
+    ax.axhspan(40, 70,  color=(0, 0, 0, 0.05), lw=0)
+    ax.axhspan(0,  40,  color=(0, 0, 0, 0.07), lw=0)
 
-    if not (st.session_state.lrp_on and sal_age >= 55):
-        ax.plot(seg_x, seg_y, linewidth=5.0, color=(0.67, 0.10, 0.10, 0.95))
+    # SAL line
+    ax.plot(xs_sal, ys_sal, color="#b77a7a", lw=2.6, alpha=0.35)
+    ax.plot(xs_sal, ys_sal, color="#a86666", lw=2.0, alpha=0.22)
 
-    if x_max == 92:
-        ax.plot([77, 92], [12, 12], linewidth=3.2, color=(0.76, 0.54, 0.54, 0.18))
+    # Highlight current SAL band segment (red)
+    hx = np.linspace(sal_a, sal_b, 30)
+    hy = np.array([sal_capacity(float(x)) for x in hx])
+    ax.plot(hx, hy, color="#b03030", lw=3.6, alpha=0.95)
 
-    # LRP progressive line
-    if st.session_state.lrp_on and sal_age >= 55:
-        cur_end = band_end(lrp_band)
-        for b in LRP_BANDS:
-            b0, b1 = band_start(b), band_end(b)
-            if b1 <= cur_end:
-                lxs = np.arange(b0, min(b1, cur_end) + 1, 1)
-                lys = np.array([lrp_capacity(x) for x in lxs])
-                is_active = (b == lrp_band)
-                if is_active:
-                    ax.plot(lxs, lys, linewidth=4.4, color=(0.10, 0.45, 0.25, 0.80))
-                else:
-                    ax.plot(lxs, lys, linewidth=3.4, color=(0.10, 0.45, 0.25, 0.35))
+    # Death marker at 77
+    ax.axvline(77, color=(0, 0, 0, 0.18), lw=1.2)
+    ax.text(77, -2.5, "77", ha="center", va="top", fontsize=10, color="#b03030", fontweight="bold")
 
+    # LRP overlay
+    if use_lrp:
+        xs_lrp = xs[xs >= 55]
+        ys_lrp = np.array([lrp_capacity(float(x)) for x in xs_lrp])
+
+        # faint green line
+        ax.plot(xs_lrp, ys_lrp, color="#1b7d4a", lw=2.3, alpha=0.30)
+
+        # highlight current LRP band segment (darker green)
+        hx2 = np.linspace(lrp_a, lrp_b, 30)
+        hy2 = np.array([lrp_capacity(float(x)) for x in hx2])
+        ax.plot(hx2, hy2, color="#167a47", lw=3.8, alpha=0.85)
+
+        # keep SAL red highlight visible but slightly faded when LRP on
+        ax.plot(hx, hy, color="#b03030", lw=3.2, alpha=0.55)
+
+    # Axes styling
     ax.set_xlim(0, x_max)
     ax.set_ylim(0, 100)
 
-    xt = list(range(0, x_max + 1, 5))
-    ax.set_xticks(xt)
-    ax.set_xlabel("Age", fontsize=10, color=(0, 0, 0, 0.68))
+    ax.set_xlabel("Age", fontsize=11, color=(0, 0, 0, 0.65))
+    ax.set_ylabel("", fontsize=10)
 
-    ax.set_yticks([20, 55, 85])
-    ax.set_yticklabels(["Frail", "Functional", "Fit"], fontsize=10, color=(0, 0, 0, 0.68))
+    # Fit/Functional/Frail labels
+    ax.text(-2.5, 80, "Fit", ha="right", va="center", fontsize=10, color=(0, 0, 0, 0.55))
+    ax.text(-2.5, 50, "Functional", ha="right", va="center", fontsize=10, color=(0, 0, 0, 0.55))
+    ax.text(-2.5, 20, "Frail", ha="right", va="center", fontsize=10, color=(0, 0, 0, 0.55))
 
     ax.grid(False)
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-    ax.spines["left"].set_color((0, 0, 0, 0.30))
-    ax.spines["bottom"].set_color((0, 0, 0, 0.30))
-    ax.tick_params(axis="x", colors=(0, 0, 0, 0.55), labelsize=8, length=0)
-    ax.tick_params(axis="y", colors=(0, 0, 0, 0.55), labelsize=8, length=0)
+    for s in ax.spines.values():
+        s.set_color((0, 0, 0, 0.18))
+        s.set_linewidth(1.0)
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    ax.tick_params(axis="both", labelsize=9, colors=(0, 0, 0, 0.55))
+
+    fig.patch.set_alpha(0.0)
+    ax.set_facecolor((0, 0, 0, 0.0))
+
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.pyplot(fig, clear_figure=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-with colR:
-    st.markdown(
-        f"""
-<div class="card">
-  <div class="hdr"><div class="ico">📋</div><h3 style="margin:0;">Diagnosis</h3></div>
-  <div class="small" style="margin-top:10px; font-size:18px; opacity:0.92;">{diag_text}</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-
-    st.markdown(
-        f"""
-<div class="card">
-  <div class="hdr"><div class="ico">℞</div><h3 style="margin:0;">Prescription</h3></div>
-  <div class="small" style="margin-top:10px; font-size:18px; opacity:0.92;">{rx_text}</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-
-    # KPI card: remove SAL gauges in LRP mode (your request)
-    if st.session_state.lrp_on and sal_age >= 55:
-        kpi_html = f"""
-<div class="card">
-  <div class="kpi-title">Check Engine Light</div>
-  <div class="kpi-row">
-    <div>{engine_svg(lrp_eng_col, size=66)}</div>
-    <div>
-      <div class="kpi-sub">Biomarkers stabilize through sustained intervention.</div>
-    </div>
-  </div>
-
-  <div class="sep"></div>
-
-  <div class="kpi-title">Fitness Zone</div>
-  <div class="kpi-row">
-    <div style="width:66px;height:66px;border-radius:999px;background:{lrp_zone_col};opacity:0.92;"></div>
-    <div>
-      <div class="kpi-sub">Capacity stays higher — and recovers faster.</div>
-    </div>
-  </div>
-</div>
-"""
+# Right: Diagnosis / Prescription / Gauges
+with right:
+    if use_lrp:
+        diag, rx = LRP_RIGHT.get(lrp_key, ("", ""))
+        engine_color = lrp_check_engine_color(lrp_a)
+        zone_color = lrp_fitness_zone_color(lrp_a)
     else:
-        kpi_html = f"""
-<div class="card">
-  <div class="kpi-title">Check Engine Light</div>
-  <div class="kpi-row">
-    <div>{engine_svg(sal_eng_col, size=66)}</div>
-    <div>
-      <div class="kpi-sub">Biomarkers drift quietly — until they don’t.</div>
-    </div>
-  </div>
+        diag, rx = SAL_RIGHT.get(sal_key, ("", ""))
+        engine_color = sal_check_engine_color(sal_a)
+        zone_color = sal_fitness_zone_color(sal_a)
 
-  <div class="sep"></div>
+    # Diagnosis card
+    st.markdown(
+        "<div class='card'>"
+        "<div class='gRow' style='margin-top:0;'>"
+        "<div class='smallIconBox'>📋</div>"
+        "<div><div class='gLabel'>Diagnosis</div></div>"
+        "</div>"
+        f"<div style='margin-top:10px; font-size:16px; color: rgba(30,30,30,0.86);'>{diag}</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
 
-  <div class="kpi-title">Fitness Zone</div>
-  <div class="kpi-row">
-    <div style="width:66px;height:66px;border-radius:999px;background:{sal_zone_col};opacity:0.92;"></div>
-    <div>
-      <div class="kpi-sub">Day-to-day capacity: stairs, energy, strength, breath.</div>
-    </div>
-  </div>
-</div>
-"""
-    st.markdown(kpi_html, unsafe_allow_html=True)
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+    # Prescription card
+    st.markdown(
+        "<div class='card'>"
+        "<div class='gRow' style='margin-top:0;'>"
+        "<div class='smallIconBox'>℞</div>"
+        "<div><div class='gLabel'>Prescription</div></div>"
+        "</div>"
+        f"<div style='margin-top:10px; font-size:16px; color: rgba(30,30,30,0.86);'>{rx}</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+    # Gauges card (NO numbers; just icon + short hint)
+    st.markdown(
+        "<div class='card'>"
+        "<div class='gLabel'>Check Engine Light</div>"
+        "<div class='gRow'>"
+        f"<div class='smallIconBox' style='border-color: rgba(0,0,0,0.10);'>"
+        f"<svg width='36' height='36' viewBox='0 0 24 24' fill='{engine_color}' xmlns='http://www.w3.org/2000/svg'>"
+        "<path d='M7 4h10l2 4h2v8h-2l-2 4H7l-2-4H3V8h2l2-4zm2.2 4.2-1-2h7.6l1 2H9.2z'/>"
+        "</svg>"
+        "</div>"
+        "<div class='gHint'>Biomarkers drift quietly — until they don’t.</div>"
+        "</div>"
+        "<hr class='sep'/>"
+        "<div class='gLabel'>Fitness Zone</div>"
+        "<div class='gRow'>"
+        f"<div class='dot' style='background:{zone_color};'></div>"
+        "<div class='gHint'>Day-to-day capacity: stairs, energy, strength, breath.</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+
+# ------------------------------------------------------------
+# Quick “guardrail”: if LRP is ON, ensure LRP index starts at 55–60
+# ------------------------------------------------------------
+if use_lrp and st.session_state.lrp_idx < 0:
+    st.session_state.lrp_idx = 0
