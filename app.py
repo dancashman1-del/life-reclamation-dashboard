@@ -2,41 +2,36 @@ import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 
-st.set_page_config(
-    page_title="A Standard American Life — Health Timeline",
-    page_icon="🧭",
-    layout="wide",
-)
+st.set_page_config(page_title="Life Timeline", page_icon="🧭", layout="wide")
 
 # -----------------------------
-# Background (parchment + 2-layer mountains, darker + rising right)
+# Background (parchment + 2-layer mountains; darker; rises to the right)
 # -----------------------------
 MOUNTAINS_SVG = """
 <svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-  <!-- back/lighter range -->
   <path d="M0,260
            C140,235 270,250 380,220
            C520,180 610,215 740,185
            C880,150 980,210 1090,165
            C1150,140 1185,130 1200,120
            L1200,320 L0,320 Z"
-        fill="rgba(0,0,0,0.07)"/>
-  <!-- front/darker range (rises to the right) -->
+        fill="rgba(0,0,0,0.075)"/>
   <path d="M0,295
            C160,270 290,300 410,265
            C540,230 650,285 790,240
            C925,200 1000,275 1120,215
            C1170,185 1190,170 1200,150
            L1200,320 L0,320 Z"
-        fill="rgba(0,0,0,0.14)"/>
+        fill="rgba(0,0,0,0.155)"/>
 </svg>
 """
 
-def engine_svg(color_hex: str) -> str:
+def engine_svg(color_hex: str, size: int = 58) -> str:
+    # slightly larger + clearer silhouette
     return f"""
-<svg width="46" height="46" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+<svg width="{size}" height="{size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   <path d="M22 18h18l4 6h6v8h-4l-2 6h-2v8H22v-6h-6v-8h4l2-6h2z"
-        fill="{color_hex}" opacity="0.96"/>
+        fill="{color_hex}" opacity="0.97"/>
   <path d="M24 28h16v16H24z" fill="white" opacity="0.22"/>
 </svg>
 """
@@ -53,17 +48,17 @@ st.markdown(
 .lrp-mountains {{
   position: fixed;
   left: 0; right: 0; bottom: -18px;
-  height: 280px;
+  height: 290px;
   pointer-events: none;
-  opacity: 0.90;  /* darker overall */
+  opacity: 0.92;
   z-index: 0;
 }}
 .block-container {{
   position: relative;
   z-index: 1;
-  padding-bottom: 180px;
+  padding-bottom: 190px;
   max-width: 1700px;
-  padding-top: 1.0rem;
+  padding-top: 0.8rem;
 }}
 
 .h1 {{
@@ -129,28 +124,6 @@ st.markdown(
   font-weight: 800;
 }}
 
-.kpi-title {{
-  font-size: 18px;
-  font-weight: 900;
-  margin: 0;
-}}
-.kpi-row {{
-  display:flex;
-  gap: 14px;
-  align-items:center;
-}}
-.kpi-sub {{
-  font-size: 14px;
-  opacity: 0.78;
-  margin-top: 4px;
-}}
-.sep {{
-  height:1px;
-  background:rgba(0,0,0,0.08);
-  margin: 14px 0;
-}}
-
-/* centered nav group */
 .navbtn > div > button {{
   border-radius: 14px !important;
   padding: 6px 12px !important;
@@ -169,6 +142,33 @@ st.markdown(
 }}
 .pill-dark {{
   background: rgba(0,0,0,0.04);
+}}
+
+.sep {{
+  height:1px;
+  background:rgba(0,0,0,0.08);
+  margin: 14px 0;
+}}
+
+.kpi-title {{
+  font-size: 16px;
+  font-weight: 900;
+  margin: 0 0 10px 0;
+}}
+.kpi-row {{
+  display:flex;
+  gap: 14px;
+  align-items:center;
+}}
+.kpi-label {{
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0;
+}}
+.kpi-sub {{
+  font-size: 13px;
+  opacity: 0.72;
+  margin-top: 4px;
 }}
 </style>
 
@@ -191,7 +191,7 @@ def band_label_for_age(age: int) -> str:
     return f"{a0}-{a1}"
 
 # -----------------------------
-# SAL curve (tuned to your red sketch; ends ~12 at 77)
+# SAL curve (ends ~12 at 77)
 # -----------------------------
 def sal_capacity(age: float) -> float:
     pts = np.array([
@@ -200,7 +200,7 @@ def sal_capacity(age: float) -> float:
         [25, 80],
         [35, 73],
         [45, 66],
-        [50, 55],  # ~Functional by 50
+        [50, 55],
         [55, 48],
         [60, 42],
         [65, 36],
@@ -210,9 +210,8 @@ def sal_capacity(age: float) -> float:
     ], dtype=float)
     return float(np.interp(age, pts[:, 0], pts[:, 1]))
 
-# Optional LRP overlay curve (simple first pass; we can refine later)
+# LRP curve (peaks near 60, stays functional at 92)
 def lrp_capacity(age: float) -> float:
-    # Peaks at ~60, then slow decline; still functional at 92
     pts = np.array([
         [55, 55],
         [60, 78],
@@ -225,9 +224,9 @@ def lrp_capacity(age: float) -> float:
     return float(np.interp(age, pts[:, 0], pts[:, 1]))
 
 # -----------------------------
-# SAL check engine + zone color rules (your rules)
-# Zone: yellow 20–25; red 30–35+; deeper red later
-# Check engine: yellow 30–45; red 45–77
+# SAL color rules (your rules)
+# Zone: yellow 20–30; red 30+
+# Engine: yellow 30–45; red 45–77
 # -----------------------------
 def sal_zone_color(age: float) -> str:
     if age < 20:
@@ -245,17 +244,35 @@ def sal_engine_color(age: float) -> str:
         return "#d6a400"
     return "#c63b3b"
 
-# Simple engine/zone scores (we can later tie to biomarker sliders)
-def sal_engine_score(age: float) -> float:
-    # stays “fine” early; then declines into midlife
-    return clamp(94 - 0.35 * max(age - 30, 0), 40, 95)
+# LRP band controls
+LRP_BANDS = ["55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85-90", "90-92"]
 
-def sal_zone_score(age: float) -> float:
-    # mostly “feel-able” earlier; more responsive
-    return clamp(sal_capacity(age), 0, 100)
+def band_start(b: str) -> int:
+    return int(b.split("-")[0])
+
+def band_end(b: str) -> int:
+    return int(b.split("-")[1])
+
+# LRP colors (for display only; we removed numbers)
+def lrp_engine_color_for_band(band: str) -> str:
+    # stays green for a long time in LRP; we can tune later
+    idx = LRP_BANDS.index(band)
+    if idx <= 4:
+        return "#39b66a"
+    if idx <= 6:
+        return "#d6a400"
+    return "#c63b3b"
+
+def lrp_zone_color_for_band(band: str) -> str:
+    idx = LRP_BANDS.index(band)
+    if idx <= 5:
+        return "#39b66a"
+    if idx == 6:
+        return "#d6a400"
+    return "#c63b3b"
 
 # -----------------------------
-# Copy: Left bullets for SAL (all bands)
+# Copy dictionaries
 # -----------------------------
 SAL_LEFT_STAGE = {
     "0-5": ("Standard Living", [
@@ -356,9 +373,6 @@ SAL_LEFT_STAGE = {
     ]),
 }
 
-# -----------------------------
-# SAL Diagnosis + Prescription (the “downplaying / carry on” voice)
-# -----------------------------
 SAL_RIGHT_STAGE = {
     "0-5":  ("“Nothing to worry about.”", "“They’ll grow out of it.”"),
     "5-10": ("“Kids bounce back.”", "“Just keep them busy.”"),
@@ -378,55 +392,50 @@ SAL_RIGHT_STAGE = {
     "75-80": ("“Do what you can.”", "“Assistive devices; supportive care.”"),
 }
 
-# -----------------------------
-# LRP bands (55–92 only)
-# -----------------------------
-LRP_BANDS = ["55-60", "60-65", "65-70", "70-75", "75-80", "80-85", "85-90", "90-92"]
-
 LRP_LEFT_STAGE = {
-    "55-60": ("Life Reclamation (LRP)", [
+    "55-60": ("Life Reclamation Project — RAMP Protocol", [
         "Strength training becomes non-negotiable",
         "Zone 2 base rebuilt; hiking feels easier",
         "Sleep regularized; mornings become powerful",
         "Real-food baseline replaces “dieting”",
     ]),
-    "60-65": ("Life Reclamation (LRP)", [
+    "60-65": ("Life Reclamation Project — RAMP Protocol", [
         "Capacity stays high; resilience grows",
         "Balance + mobility become deliberate training",
         "Labs improve; inflammation falls",
         "Purpose expands: adventures, projects, people",
     ]),
-    "65-70": ("Life Reclamation (LRP)", [
+    "65-70": ("Life Reclamation Project — RAMP Protocol", [
         "You become the outlier in your peer group",
         "Leg strength + gait protect independence",
         "HIIT is strategic, not punishing",
         "Consistency beats intensity—again and again",
     ]),
-    "70-75": ("Life Reclamation (LRP)", [
+    "70-75": ("Life Reclamation Project — RAMP Protocol", [
         "Still hiking, still traveling, still strong",
         "Falls prevention is a top priority",
         "Community + purpose stay active",
         "Recovery rituals protect the engine",
     ]),
-    "75-80": ("Life Reclamation (LRP)", [
+    "75-80": ("Life Reclamation Project — RAMP Protocol", [
         "Independence preserved; life stays big",
         "Daily movement becomes identity",
         "Strength stays in the program",
         "Healthspan is the mission",
     ]),
-    "80-85": ("Life Reclamation (LRP)", [
+    "80-85": ("Life Reclamation Project — RAMP Protocol", [
         "Still capable; still engaged",
         "Simple routines, executed consistently",
         "Strength + gait + balance maintained",
         "Joy, connection, and meaning stay central",
     ]),
-    "85-90": ("Life Reclamation (LRP)", [
+    "85-90": ("Life Reclamation Project — RAMP Protocol", [
         "Compressed morbidity becomes real",
         "Support is planned—not reactive",
         "Movement continues, safely",
         "Legacy and love rise in priority",
     ]),
-    "90-92": ("Life Reclamation (LRP)", [
+    "90-92": ("Life Reclamation Project — RAMP Protocol", [
         "Finishing strong—functional and present",
         "Small daily wins keep the system stable",
         "Sleep and connection remain core",
@@ -453,52 +462,35 @@ LRP_RIGHT_STAGE = {
               "Movement, connection, sleep — the essentials."),
 }
 
-# LRP zone/engine scores (first pass: better than SAL, responsive to “consistency” later)
-def lrp_engine_score(band: str) -> float:
-    idx = LRP_BANDS.index(band)
-    # very high and stable
-    return clamp(88 - idx * 2.0, 72, 92)
-
-def lrp_zone_score(band: str) -> float:
-    idx = LRP_BANDS.index(band)
-    # stays functional-to-fit for longer
-    return clamp(78 - idx * 1.8, 60, 85)
-
-def lrp_engine_color(score: float) -> str:
-    if score >= 82:
-        return "#39b66a"
-    if score >= 72:
-        return "#d6a400"
-    return "#c63b3b"
-
-def lrp_zone_color(score: float) -> str:
-    if score >= 72:
-        return "#39b66a"
-    if score >= 55:
-        return "#d6a400"
-    return "#c63b3b"
-
-
-# -----------------------------
-# Header
-# -----------------------------
-st.markdown('<div class="h1">A Standard American Life — Health Timeline</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub">The default path — minimized early, medicated later</div>', unsafe_allow_html=True)
-
 # -----------------------------
 # Session state
 # -----------------------------
 if "sal_age" not in st.session_state:
-    st.session_state.sal_age = 22  # 20–25
+    st.session_state.sal_age = 55
 if "lrp_on" not in st.session_state:
-    st.session_state.lrp_on = False
+    st.session_state.lrp_on = True
 if "lrp_idx" not in st.session_state:
-    st.session_state.lrp_idx = 0  # 55–60
+    st.session_state.lrp_idx = 0
 
 # -----------------------------
-# NAV ROW: SAL controls centered; LRP controls on the right
+# Header changes with LRP
 # -----------------------------
-# 7 columns: spacer | SAL prev | SAL band | SAL next | spacer | LRP toggle | LRP band controls
+sal_age = st.session_state.sal_age
+sal_band = band_label_for_age(sal_age)
+
+if st.session_state.lrp_on and sal_age >= 55:
+    title = "Life Reclamation Project — RAMP Protocol"
+    subtitle = "The intervention path — intentional living, compounding vitality"
+else:
+    title = "A Standard American Life — Health Timeline"
+    subtitle = "The default path — minimized early, medicated later"
+
+st.markdown(f'<div class="h1">{title}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="sub">{subtitle}</div>', unsafe_allow_html=True)
+
+# -----------------------------
+# Controls row
+# -----------------------------
 c1, c2, c3, c4, c5, c6, c7 = st.columns([2.0, 0.8, 1.4, 0.8, 1.2, 1.2, 2.6], vertical_alignment="center")
 
 with c2:
@@ -508,8 +500,7 @@ with c2:
     st.markdown("</div>", unsafe_allow_html=True)
 
 with c3:
-    sal_band = band_label_for_age(st.session_state.sal_age)
-    st.markdown(f"<span class='pill'>{sal_band}</span>", unsafe_allow_html=True)
+    st.markdown(f"<span class='pill'>{band_label_for_age(st.session_state.sal_age)}</span>", unsafe_allow_html=True)
 
 with c4:
     st.markdown("<div class='navbtn'>", unsafe_allow_html=True)
@@ -538,28 +529,15 @@ with c7:
     else:
         st.markdown("<span class='small'>LRP band: 55–92</span>", unsafe_allow_html=True)
 
-# -----------------------------
-# Derived values
-# -----------------------------
+# recompute after potential changes
 sal_age = st.session_state.sal_age
 sal_band = band_label_for_age(sal_age)
-
-sal_engine_col = sal_engine_color(sal_age)
-sal_engine_sc = sal_engine_score(sal_age)
-sal_zone_sc = sal_zone_score(sal_age)
-sal_zone_col = sal_zone_color(sal_age)
-
-# LRP values if enabled
 lrp_band = LRP_BANDS[st.session_state.lrp_idx]
-lrp_eng_sc = lrp_engine_score(lrp_band)
-lrp_eng_col = lrp_engine_color(lrp_eng_sc)
-lrp_zone_sc = lrp_zone_score(lrp_band)
-lrp_zone_col = lrp_zone_color(lrp_zone_sc)
 
 # Copy selection
-# Left bullets: SAL always on left; if LRP enabled AND SAL is 55+ then show LRP bullets
 if st.session_state.lrp_on and sal_age >= 55 and lrp_band in LRP_LEFT_STAGE:
     left_title, left_bullets = LRP_LEFT_STAGE[lrp_band]
+    diag_text, rx_text = LRP_RIGHT_STAGE[lrp_band]
 else:
     left_title, left_bullets = SAL_LEFT_STAGE.get(
         sal_band,
@@ -570,15 +548,16 @@ else:
             "Food environment wins by default",
         ])
     )
-
-# Right diag/rx: if LRP enabled AND SAL is 55+ show LRP; else SAL downplaying
-if st.session_state.lrp_on and sal_age >= 55 and lrp_band in LRP_RIGHT_STAGE:
-    diag_text, rx_text = LRP_RIGHT_STAGE[lrp_band]
-else:
     diag_text, rx_text = SAL_RIGHT_STAGE.get(sal_band, ("“You’re fine.”", "“Carry on.”"))
 
-# KPI selection: show SAL always, but if LRP enabled AND SAL 55+ show both stacks (SAL vs LRP)
-show_lrp_kpis = st.session_state.lrp_on and sal_age >= 55
+# -----------------------------
+# KPI colors
+# -----------------------------
+sal_eng_col = sal_engine_color(sal_age)
+sal_zone_col = sal_zone_color(sal_age)
+
+lrp_eng_col = lrp_engine_color_for_band(lrp_band)
+lrp_zone_col = lrp_zone_color_for_band(lrp_band)
 
 # -----------------------------
 # Layout
@@ -598,10 +577,17 @@ with colL:
     )
 
 with colC:
-    xs = np.arange(0, 78, 1)
-    ys = np.array([sal_capacity(x) for x in xs])
+    # X range changes in LRP mode (0–92) but chart pixel width stays same
+    if st.session_state.lrp_on and sal_age >= 55:
+        x_max = 92
+    else:
+        x_max = 77
 
-    # Highlight SAL current 5-year segment
+    # SAL curve (always plotted 0–77; fades after 77 if x_max=92)
+    xs_sal = np.arange(0, 78, 1)
+    ys_sal = np.array([sal_capacity(x) for x in xs_sal])
+
+    # Highlight segment: SAL only when NOT LRP; when LRP on, we emphasize LRP instead
     a0 = (sal_age // 5) * 5
     seg_x = np.arange(a0, min(a0 + 5, 77) + 1, 1)
     seg_y = np.array([sal_capacity(x) for x in seg_x])
@@ -610,22 +596,41 @@ with colC:
     fig.patch.set_alpha(0)
     ax.set_facecolor((0, 0, 0, 0))
 
-    # SAL main + highlight
-    ax.plot(xs, ys, linewidth=3.8, color=(0.76, 0.54, 0.54, 0.55))
-    ax.plot(seg_x, seg_y, linewidth=5.0, color=(0.67, 0.10, 0.10, 0.95))
+    # SAL line
+    ax.plot(xs_sal, ys_sal, linewidth=3.8, color=(0.76, 0.54, 0.54, 0.55))
 
-    # Optional LRP overlay (starts at 55)
-    if st.session_state.lrp_on:
-        lxs = np.arange(55, 93, 1)
-        lys = np.array([lrp_capacity(x) for x in lxs])
-        ax.plot(lxs, lys, linewidth=3.4, color=(0.10, 0.45, 0.25, 0.55))
+    # If LRP not active, show a strong red highlight for current SAL band
+    if not (st.session_state.lrp_on and sal_age >= 55):
+        ax.plot(seg_x, seg_y, linewidth=5.0, color=(0.67, 0.10, 0.10, 0.95))
 
-    ax.axvline(77, linewidth=3.2, color=(0, 0, 0, 0.22))
+    # Fade SAL after 77 if we extend x-axis to 92
+    if x_max == 92:
+        ax.plot([77, 92], [12, 12], linewidth=3.2, color=(0.76, 0.54, 0.54, 0.18))
 
-    ax.set_xlim(0, 77)
+    # LRP progressive line (55 -> current band end)
+    if st.session_state.lrp_on and sal_age >= 55:
+        cur_end = band_end(lrp_band)
+
+        # plot prior segments lightly
+        for b in LRP_BANDS:
+            b0, b1 = band_start(b), band_end(b)
+            if b1 <= cur_end:
+                lxs = np.arange(b0, min(b1, cur_end) + 1, 1)
+                lys = np.array([lrp_capacity(x) for x in lxs])
+
+                # active band darker
+                is_active = (b == lrp_band)
+                if is_active:
+                    ax.plot(lxs, lys, linewidth=4.4, color=(0.10, 0.45, 0.25, 0.80))
+                else:
+                    ax.plot(lxs, lys, linewidth=3.4, color=(0.10, 0.45, 0.25, 0.35))
+
+    # Axis styling
+    ax.set_xlim(0, x_max)
     ax.set_ylim(0, 100)
 
-    ax.set_xticks(list(range(0, 80, 5)))
+    xt = list(range(0, x_max + 1, 5))
+    ax.set_xticks(xt)
     ax.set_xlabel("Age", fontsize=10, color=(0, 0, 0, 0.68))
 
     ax.set_yticks([20, 55, 85])
@@ -668,45 +673,47 @@ with colR:
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # KPI card: SAL always; if LRP enabled and 55+ show LRP under it
-    if show_lrp_kpis:
+    # KPI card: Check Engine Light + Fitness Zone (no numbers)
+    # When LRP active + 55+, show both stacks, but minimal.
+    if st.session_state.lrp_on and sal_age >= 55:
         kpi_html = f"""
 <div class="card">
-  <div class="kpi-title" style="margin-bottom:10px;">Standard American Life</div>
-
+  <div class="kpi-title">Check Engine Light</div>
   <div class="kpi-row">
-    <div>{engine_svg(sal_engine_col)}</div>
+    <div>{engine_svg(sal_eng_col, size=62)}</div>
     <div>
-      <div class="kpi-sub">Engine score: <b>{sal_engine_sc:.1f}</b></div>
+      <p class="kpi-label" style="margin:0;">Standard American Life</p>
+      <div class="kpi-sub">Risk compounds later — after years of “carry on.”</div>
     </div>
   </div>
 
   <div class="sep"></div>
 
+  <div class="kpi-title">Fitness Zone</div>
   <div class="kpi-row">
-    <div style="width:44px;height:44px;border-radius:999px;background:{sal_zone_col};opacity:0.92;"></div>
+    <div style="width:62px;height:62px;border-radius:999px;background:{sal_zone_col};opacity:0.92;"></div>
     <div>
-      <div class="kpi-sub">Score: <b>{sal_zone_sc:.1f}</b></div>
+      <div class="kpi-sub">How you feel now — the day-to-day capacity signal.</div>
     </div>
   </div>
 
   <div class="sep"></div>
 
-  <div class="kpi-title" style="margin-bottom:10px;">Life Reclamation Project</div>
-
+  <div class="kpi-title">LRP Check Engine Light</div>
   <div class="kpi-row">
-    <div>{engine_svg(lrp_eng_col)}</div>
+    <div>{engine_svg(lrp_eng_col, size=62)}</div>
     <div>
-      <div class="kpi-sub">Engine score: <b>{lrp_eng_sc:.1f}</b></div>
+      <div class="kpi-sub">Biomarkers stabilize through sustained intervention.</div>
     </div>
   </div>
 
   <div class="sep"></div>
 
+  <div class="kpi-title">LRP Fitness Zone</div>
   <div class="kpi-row">
-    <div style="width:44px;height:44px;border-radius:999px;background:{lrp_zone_col};opacity:0.92;"></div>
+    <div style="width:62px;height:62px;border-radius:999px;background:{lrp_zone_col};opacity:0.92;"></div>
     <div>
-      <div class="kpi-sub">Score: <b>{lrp_zone_sc:.1f}</b></div>
+      <div class="kpi-sub">Capacity stays higher — and recovers faster.</div>
     </div>
   </div>
 </div>
@@ -714,20 +721,21 @@ with colR:
     else:
         kpi_html = f"""
 <div class="card">
+  <div class="kpi-title">Check Engine Light</div>
   <div class="kpi-row">
-    <div>{engine_svg(sal_engine_col)}</div>
+    <div>{engine_svg(sal_eng_col, size=62)}</div>
     <div>
-      <p class="kpi-title">Check Engine</p>
-      <div class="kpi-sub">Engine score: <b>{sal_engine_sc:.1f}</b></div>
+      <div class="kpi-sub">Biomarkers drift quietly — until they don’t.</div>
     </div>
   </div>
 
   <div class="sep"></div>
 
+  <div class="kpi-title">Fitness Zone</div>
   <div class="kpi-row">
-    <div style="width:44px;height:44px;border-radius:999px;background:{sal_zone_col};opacity:0.92;"></div>
+    <div style="width:62px;height:62px;border-radius:999px;background:{sal_zone_col};opacity:0.92;"></div>
     <div>
-      <div class="kpi-sub">Score: <b>{sal_zone_sc:.1f}</b></div>
+      <div class="kpi-sub">Day-to-day capacity: stairs, energy, strength, breath.</div>
     </div>
   </div>
 </div>
