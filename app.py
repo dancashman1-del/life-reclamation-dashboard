@@ -1,520 +1,998 @@
-# app.py — Life Reclamation Project (Streamlit) — FULL REPLACEMENT (Copy-Rich + SAL per-age bullets)
-# requirements.txt should include:
-# streamlit
-# plotly
+# app.py — Life Reclamation Dashboard (Single-file Streamlit app)
+# Drop into GitHub and deploy on Streamlit Cloud.
+#
+# Views:
+# 1) Timeline view: age-by-age SAL vs LRP trajectory + narrative (Diagnosis / Prescription)
+# 2) Threshold view (formerly “Gandalf”): Health / Wealth / SILO thresholds, in both modes
+#
+# Notes:
+# - “Hitting the Switchback” marker is fixed at age 55.
+# - Health: red → green
+# - Wealth: amber → teal
+# - SILO: below-ground filled gray / above-ground outline
+#
+# Source inspiration for SAL age-bucket narrative is based on your “Typical American Life” draft notes. :contentReference[oaicite:0]{index=0}
 
-from __future__ import annotations
-import streamlit as st
+import math
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
+import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
 
-# ----------------------------
-# PAGE CONFIG
-# ----------------------------
-st.set_page_config(page_title="Life Reclamation Project — RAMP Protocol", layout="wide")
+# -----------------------------
+# Page config + light styling
+# -----------------------------
+st.set_page_config(
+    page_title="Life Reclamation Dashboard",
+    page_icon="🧭",
+    layout="wide",
+)
 
-
-# ----------------------------
-# CSS
-# ----------------------------
 st.markdown(
     """
 <style>
-.block-container { padding-top: 1.0rem; }
-[data-testid="stAppViewContainer"] {
-  background: linear-gradient(180deg, #fbf7f0 0%, #f7f2ea 60%, #f5efe6 100%);
+/* tighten default spacing a bit */
+.block-container { padding-top: 1.25rem; padding-bottom: 2rem; }
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+/* “dashboard” cards */
+.lrp-card {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  padding: 14px 14px 12px 14px;
+}
+.small-muted { color: rgba(255,255,255,0.65); font-size: 0.92rem; }
+.tiny-muted { color: rgba(255,255,255,0.55); font-size: 0.82rem; }
+
+/* Threshold “pill” label */
+.pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.04);
 }
 
-/* Left panel card */
-.left-card {
-  background: rgba(255,255,255,0.72);
-  border: 2px solid rgba(0,0,0,0.12);
+/* SILO ground line */
+.groundline {
+  height: 2px;
+  background: rgba(255,255,255,0.22);
+  border-radius: 99px;
+}
+
+/* bar container */
+.bar-wrap {
+  width: 100%;
+  max-width: 520px;
   border-radius: 18px;
-  padding: 18px 18px 14px 18px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.03);
+  padding: 12px;
 }
-
-/* Right panel cards */
-.right-card {
-  background: rgba(255,255,255,0.72);
-  border: 2px solid rgba(0,0,0,0.12);
-  border-radius: 18px;
-  padding: 16px 16px 14px 16px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
-  margin-bottom: 14px;
-}
-.right-title {
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  font-size: 14px;
-  opacity: 0.85;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.right-icon {
-  font-size: 18px;
-  line-height: 18px;
-}
-.right-body {
-  font-size: 14px;
-  line-height: 1.45;
-  opacity: 0.9;
-}
-
-/* SAL per-age bullets: smaller + 2 columns when lots of items */
-.age-bullets {
-  column-count: 2;
-  column-gap: 28px;
-  margin: 0;
-  padding-left: 18px;
-  line-height: 1.55;
-  font-size: 13px;
-}
-@media (max-width: 1200px) {
-  .age-bullets { column-count: 1; }
-}
-
-/* Plot rounding */
-.js-plotly-plot, .plotly, .plot-container { border-radius: 18px !important; }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
+# -----------------------------
+# Constants
+# -----------------------------
+SWITCHBACK_AGE = 55
 
-# ----------------------------
-# TITLES
-# ----------------------------
-TITLE = "Life Reclamation Project — RAMP Protocol"
-SUBTITLE = "The intervention path — first 5 years, massive reversal"
-
-
-# ----------------------------
-# SERIES KNOTS
-# ----------------------------
-SAL_KNOTS = [
-    (0, 78),
-    (20, 77),
-    (45, 66),
-    (55, 50),
-    (62, 38),
-    (70, 20),
-    (77, 5),
-]
-
-LRP_KNOTS = [
-    (55, 52),
-    (60, 78),
-    (65, 78),  # hold high 5 years
-    (75, 70),
-    (85, 62),
-    (90, 58),
-    (91, 55),  # faster drop begins ~90–91
-    (92, 44),  # still far above SAL@77
-]
+# For this dashboard we keep “lifespan” adjustable but bounded.
+MIN_AGE = 0
+MAX_AGE = 100
 
 
-# ----------------------------
-# WINDOWS
-# ----------------------------
-SAL_WINDOWS = [
-    (0, 5),
-    (5, 10),
-    (10, 20),
-    (20, 30),
-    (30, 40),
-    (40, 50),
-    (50, 55),
-    (55, 60),
-    (60, 65),
-    (65, 70),
-    (70, 75),
-    (75, 77),
-]
-
-LRP_WINDOWS = [
-    (55, 60),
-    (60, 65),
-    (65, 70),
-    (70, 75),
-    (75, 80),
-    (80, 85),
-    (85, 90),
-    (90, 92),
-]
+# -----------------------------
+# Narrative (SAL / LRP) buckets
+# -----------------------------
+@dataclass(frozen=True)
+class BucketNarrative:
+    title: str
+    subtitle: str
+    diagnosis: List[str]
+    prescription: List[str]
 
 
-# ----------------------------
-# COPY: HIGH-QUALITY DEFAULTS + SPECIFIC OVERRIDES
-# ----------------------------
-DEFAULT_COPY = {
-    "LRP": {
-        "left_title": "Reclamation (deliberate, compounding)",
-        "bullets": [
-            "Strength training is non-negotiable — protect muscle and power",
-            "Zone 2 becomes your default engine; HIIT stays dosed",
-            "Sleep is treated like a keystone habit (not a nice-to-have)",
-            "Real food most of the time — cravings lose their grip",
+def _bucket_key(age: int) -> str:
+    # 0-5, 5-10, ... 90-95, 95-100
+    lo = (age // 5) * 5
+    hi = lo + 5
+    if age >= 100:
+        lo, hi = 100, 105
+    return f"{lo:02d}-{hi:02d}"
+
+
+def build_narratives() -> Tuple[Dict[str, BucketNarrative], Dict[str, BucketNarrative]]:
+    """
+    SAL text is loosely derived from your draft “Typical American Life” notes.
+    LRP text is an uplifted alternative (same age buckets).
+    Keep these short: the UI is meant to be skimmable.
+    """
+    sal: Dict[str, BucketNarrative] = {}
+    lrp: Dict[str, BucketNarrative] = {}
+
+    # --- SAL (Typical American Life) ---
+    sal["00-05"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 0–5",
+        diagnosis=[
+            "Healthy (but the default path is being set).",
         ],
-        "diag": "Capacity is the vital sign. You’re raising the ceiling, not just managing symptoms.",
-        "rx": "Strength + Zone 2 + small HIIT dose; protein and sleep as guardrails.",
-        "ce": "You notice drift early — and correct while it’s still cheap.",
-    },
-    "SAL": {
-        "left_title": "Default Path (drift)",
-        "bullets": [
-            "Fitness erodes slowly — until it suddenly feels like “old age”",
-            "Pain avoidance replaces strength work",
-            "Screens replace movement; movement becomes “optional”",
-            "Health becomes reactive (appointments, meds, setbacks)",
+        prescription=[
+            "Breast milk + mostly whole foods (some sweets).",
+            "Lots of physical play; minimal screen time; strong bonding; good sleep.",
         ],
-        "diag": "Decline is invisible in the moment and obvious in hindsight.",
-        "rx": "“Wait and see” becomes the plan — until you’re forced to act.",
-        "ce": "The warning light is ignored until it’s loud.",
-    },
-}
-
-# Window-specific upgrades (add more anytime; these cover the key LRP windows + SAL midlife)
-COPY_BY_WINDOW = {
-    ("LRP", (55, 60)): {
-        "left_title": "Reclamation Begins (first 5 years)",
-        "bullets": [
-            "Strength becomes non-negotiable (legs, back, grip, carries)",
-            "Zone 2 base rebuilt; hiking feels easier within months",
-            "Sleep regularized — mornings feel powerful again",
-            "Real food replaces “dieting”; cravings quiet down",
+    )
+    sal["05-10"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 5–10",
+        diagnosis=[
+            "Diet quality starts sliding; dopamine distractions begin.",
         ],
-        "diag": "Baseline labs & BP improve fast once compliance is real.",
-        "rx": "Strength + Zone 2 + HIIT; protect sleep; 95% real food.",
-        "ce": "Biomarkers drift quietly — until they don’t.",
-    },
-    ("LRP", (60, 65)): {
-        "left_title": "Peak Window (hold the line)",
-        "bullets": [
-            "Keep strength heavy and consistent — don’t “graduate” from it",
-            "Zone 2 feels easier — that’s the engine getting efficient",
-            "Trips/hikes become identity, not exercise",
-            "Stress hygiene protects sleep and appetite",
+        prescription=[
+            "Sugary cereals, nuggets, candy, chips, juices become common.",
+            "Some physical play, but games/shows start taking over; bonding decreases.",
         ],
-        "diag": "Doctor is stunned — keep doing whatever you’re doing.",
-        "rx": "Same basics; tighten consistency; keep progressive strength.",
-        "ce": "Maintain the system before life tests it.",
-    },
-    ("LRP", (85, 90)): {
-        "left_title": "Late Decades (still capable)",
-        "bullets": [
-            "Power work stays safe and small — but stays",
-            "Strength protects joints and independence",
-            "Cardio protects brain and stamina",
-            "Purpose keeps you out of the chair",
+    )
+    sal["10-15"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 10–15",
+        diagnosis=[
+            "“Healthy?” (exercise narrows to organized sports).",
         ],
-        "diag": "You’re aging — but your slope is still yours.",
-        "rx": "Strength 2x/week minimum; Zone 2 weekly; HIIT only if recovery is strong.",
-        "ce": "One small lapse is fine; a pattern is not.",
-    },
-    ("LRP", (90, 92)): {
-        "left_title": "The Steeper Drop (still above default)",
-        "bullets": [
-            "The line drops faster now — but from a much higher place",
-            "You still move, still climb stairs, still travel",
-            "You’re managing recovery, not surrendering capacity",
-            "You finish functional — not fragile",
+        prescription=[
+            "Fast food and snacking increase.",
+            "First phone + social scrolling begins; gaming rises; sleep quality slips.",
         ],
-        "diag": "The goal was never immortality — it was preserved function.",
-        "rx": "Protect strength + protein; keep walking; simplify, don’t stop.",
-        "ce": "Keep it safe. Keep it consistent. Keep it yours.",
-    },
-
-    ("SAL", (40, 50)): {
-        "left_title": "Default Path (midlife drift)",
-        "bullets": [
-            "Work and stress crowd out training",
-            "Weight creeps up; sleep gets lighter",
-            "More sitting; less power, less balance",
-            "Health feels “fine” — but capacity is shrinking",
+    )
+    # From here we keep the spirit but compress repetition
+    sal["15-20"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 15–20",
+        diagnosis=["Sedentary drift + processed food normalization."],
+        prescription=[
+            "More refined grains/sugars/bad oils.",
+            "More scrolling/streaming; activity mainly incidental.",
         ],
-        "diag": "You still look normal — but the decline has already started.",
-        "rx": "Occasional bursts of effort, no system, no progression.",
-        "ce": "The light flickers… you call it ‘life’ and move on.",
-    },
-    ("SAL", (65, 70)): {
-        "left_title": "Default Path (the narrowing)",
-        "bullets": [
-            "Stairs feel harder; you blame age",
-            "Minor injuries linger; activity shrinks further",
-            "More appointments; more caution",
-            "Strength fades — then confidence follows",
+    )
+    sal["20-25"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 20–25",
+        diagnosis=["Weight gain and fatigue become background noise."],
+        prescription=[
+            "Primarily processed / fast food.",
+            "Gaming/scrolling + studying + alcohol; movement drops.",
         ],
-        "diag": "The window for easy reversal is closing.",
-        "rx": "Meds may help numbers; they don’t rebuild capacity.",
-        "ce": "The warning becomes the new normal.",
-    },
-}
-
-
-def get_copy(mode: str, window: tuple[int, int]) -> dict:
-    base = DEFAULT_COPY[mode].copy()
-    override = COPY_BY_WINDOW.get((mode, window))
-    if override:
-        base.update(override)
-    return base
-
-
-# ----------------------------
-# SAL: AGE-BY-AGE “SAD LIFE” BULLETS
-# ----------------------------
-def sal_line_for_age(age: int) -> str:
-    # Quick, age-appropriate “sad drift” lines (you can refine anytime)
-    if age < 10:
-        return "More screens, less outside play."
-    if age < 20:
-        return "Activity becomes optional; posture and sleep worsen."
-    if age < 30:
-        return "Fitness is episodic; consistency never forms."
-    if age < 40:
-        return "Sitting dominates; stress + convenience eating build."
-    if age < 50:
-        return "‘Fine’ on the surface; capacity quietly shrinking."
-    if age < 55:
-        return "Aches appear; you avoid loading and lifting."
-    if age < 60:
-        return "More caution, less challenge; strength drops fast."
-    if age < 65:
-        return "Stairs and hikes get negotiated, not enjoyed."
-    if age < 70:
-        return "Appointments and meds increase; confidence decreases."
-    if age < 75:
-        return "Falls risk rises; travel narrows; independence slips."
-    return "Frailty accelerates; help becomes necessary."
-
-
-def build_sal_age_bullets(window: tuple[int, int]) -> list[str]:
-    start, end = window
-    return [f"Age {a}: {sal_line_for_age(a)}" for a in range(start, end + 1)]
-
-
-# ----------------------------
-# SERIES HELPERS
-# ----------------------------
-def interpolate_from_knots(knots: list[tuple[int, float]], x_min: int, x_max: int, step: int = 1):
-    knots = sorted(knots, key=lambda t: t[0])
-    xs, ys = [], []
-    for x in range(x_min, x_max + 1, step):
-        if x <= knots[0][0]:
-            xs.append(x); ys.append(knots[0][1]); continue
-        if x >= knots[-1][0]:
-            xs.append(x); ys.append(knots[-1][1]); continue
-        for i in range(len(knots) - 1):
-            x0, y0 = knots[i]
-            x1, y1 = knots[i + 1]
-            if x0 <= x <= x1:
-                t = 0 if x1 == x0 else (x - x0) / (x1 - x0)
-                y = y0 + t * (y1 - y0)
-                xs.append(x); ys.append(y)
-                break
-    return xs, ys
-
-
-def segment_between(xs, ys, start_x: int, end_x: int):
-    seg_x, seg_y = [], []
-    for x, y in zip(xs, ys):
-        if start_x <= x <= end_x:
-            seg_x.append(x); seg_y.append(y)
-    return seg_x, seg_y
-
-
-# ----------------------------
-# SESSION STATE
-# ----------------------------
-if "mode" not in st.session_state:
-    st.session_state.mode = "LRP"
-if "age_index" not in st.session_state:
-    st.session_state.age_index = 1  # default to 60–65 for LRP
-
-
-# ----------------------------
-# TOP BAR
-# ----------------------------
-top_left, top_mid, top_right = st.columns([1.3, 6, 1.3], vertical_alignment="center")
-
-with top_left:
-    lrp_mode = st.toggle("LRP", value=(st.session_state.mode == "LRP"), key="lrp_toggle")
-
-with top_mid:
-    st.markdown(f"<h1 style='text-align:center; margin:0;'>{TITLE}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; margin-top:2px; opacity:0.70;'>{SUBTITLE}</p>", unsafe_allow_html=True)
-
-with top_right:
-    show_other = st.checkbox("Show other line", value=True, key="show_other_line")
-
-
-# Mode switch handling
-new_mode = "LRP" if lrp_mode else "SAL"
-if new_mode != st.session_state.mode:
-    st.session_state.mode = new_mode
-    if new_mode == "LRP":
-        st.session_state.age_index = LRP_WINDOWS.index((60, 65)) if (60, 65) in LRP_WINDOWS else 0
-    else:
-        st.session_state.age_index = SAL_WINDOWS.index((40, 50)) if (40, 50) in SAL_WINDOWS else 0
-
-
-MODE = st.session_state.mode
-WINDOWS = LRP_WINDOWS if MODE == "LRP" else SAL_WINDOWS
-st.session_state.age_index = max(0, min(st.session_state.age_index, len(WINDOWS) - 1))
-start_age, end_age = WINDOWS[st.session_state.age_index]
-
-
-# ----------------------------
-# NAV
-# ----------------------------
-nav_left, nav_mid, nav_right = st.columns([1, 3, 1], vertical_alignment="center")
-
-with nav_left:
-    if st.button("←", key="nav_left_btn", use_container_width=True):
-        st.session_state.age_index = max(0, st.session_state.age_index - 1)
-
-with nav_mid:
-    st.markdown(
-        f"<div style='text-align:center; font-weight:900; font-size:18px; padding:6px 0;'>{MODE} {start_age}–{end_age}</div>",
-        unsafe_allow_html=True,
+    )
+    sal["25-30"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 25–30",
+        diagnosis=["Sedentary career patterns cement."],
+        prescription=[
+            "Desk job; low daily movement; sleep debt accumulates.",
+            "“Maybe lose some weight” attempts begin, but environment stays the same.",
+        ],
+    )
+    sal["30-35"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 30–35",
+        diagnosis=["Stress rises; energy drops; aches appear."],
+        prescription=[
+            "More screen-based decompression (scrolling/streaming).",
+            "Alcohol creeps up; processed foods persist.",
+        ],
+    )
+    sal["35-40"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 35–40",
+        diagnosis=["Mood and sleep issues show up."],
+        prescription=[
+            "Poor sleep becomes chronic; stress coping turns passive.",
+            "Medications may start (e.g., SSRI) rather than root-cause change.",
+        ],
+    )
+    sal["40-45"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 40–45",
+        diagnosis=["Blood pressure / metabolic warning signs."],
+        prescription=[
+            "“Cut salt, maybe lose weight” + meds; lifestyle shifts are modest.",
+            "Sedentary work continues; sleep remains poor.",
+        ],
+    )
+    sal["45-50"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 45–50",
+        diagnosis=["Elevated HbA1c, chronic stress."],
+        prescription=[
+            "More meds; some diet improvements, but behavior is inconsistent.",
+            "Movement still not structured.",
+        ],
+    )
+    sal["50-55"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 50–55",
+        diagnosis=["Pain episodes turn chronic; resilience is low."],
+        prescription=[
+            "Specialists + prescriptions become the default response.",
+            "Coping is still screen-heavy; recovery is weak.",
+        ],
+    )
+    sal["55-60"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 55–60",
+        diagnosis=["Big diagnosis era (autoimmune, heart, cancer risk rises)."],
+        prescription=[
+            "Procedures/meds; “maybe exercise now” arrives late.",
+            "Some diet cleanup, but baseline fitness is limited.",
+        ],
+    )
+    sal["60-65"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 60–65",
+        diagnosis=["Major event risk: heart disease / cancer."],
+        prescription=[
+            "Treatment-focused; activity becomes short walks.",
+            "Sleep often still poor; frailty slope begins.",
+        ],
+    )
+    sal["65-70"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 65–70",
+        diagnosis=["Cognitive decline signals may appear."],
+        prescription=[
+            "Medications and supervision increase.",
+            "Life narrows; strength and balance are fragile.",
+        ],
+    )
+    sal["70-75"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 70–75",
+        diagnosis=["Falls / rigidity / compounding disability."],
+        prescription=[
+            "Assisted living may begin; polypharmacy grows.",
+            "Independence shrinks quickly.",
+        ],
+    )
+    sal["75-80"] = BucketNarrative(
+        title="A Typical American Life",
+        subtitle="Health • ages 75–80",
+        diagnosis=["End-of-life window for the default path."],
+        prescription=[
+            "Comfort care mindset; limited mobility.",
+            "The “engine light” has been on for decades.",
+        ],
     )
 
-with nav_right:
-    if st.button("→", key="nav_right_btn", use_container_width=True):
-        st.session_state.age_index = min(len(WINDOWS) - 1, st.session_state.age_index + 1)
+    # --- LRP (Life Reclamation Path) ---
+    # The structure: early-life is already decent, but the “switchback” is the conscious turn at 55.
+    # LRP peaks at ~60 (after ~5 years of doing the right things), then gentle decline, still functional at 92.
+    for lo in range(0, 105, 5):
+        k = f"{lo:02d}-{(lo+5):02d}"
+        if k == "00-05":
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle="Health • ages 0–5",
+                diagnosis=["Strong start."],
+                prescription=[
+                    "Same basics: whole foods, play, sleep, bonding.",
+                    "Build a lifelong identity: “I move every day.”",
+                ],
+            )
+        elif lo < SWITCHBACK_AGE:
+            # pre-switchback: better-than-average habits accumulate slowly
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle=f"Health • ages {lo}–{lo+5}",
+                diagnosis=["Mostly functional, with drift kept in check."],
+                prescription=[
+                    "Maintain strength + aerobic base (Zone 2) as non-negotiables.",
+                    "Reduce screen-based coping; protect sleep; walk daily.",
+                ],
+            )
+        elif lo == SWITCHBACK_AGE:
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle=f"Health • ages {lo}–{lo+5}",
+                diagnosis=["Hitting the Switchback — choose your trajectory."],
+                prescription=[
+                    "Commit to 5-year rebuild: strength 2–3x/week + Zone 2 3x/week.",
+                    "Design environment: protein-first meals, steps, sunlight, sleep.",
+                    "Tie in Wealth + Purpose to reduce stress and sustain change.",
+                ],
+            )
+        elif lo < 65:
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle=f"Health • ages {lo}–{lo+5}",
+                diagnosis=["Rebuild phase: capacity rises quickly."],
+                prescription=[
+                    "Progressive strength; Zone 2 volume; occasional HIIT; mobility.",
+                    "Track “engine indicators”: waist, BP, VO₂, strength benchmarks.",
+                ],
+            )
+        elif lo < 80:
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle=f"Health • ages {lo}–{lo+5}",
+                diagnosis=["Maintenance phase: protect the peak."],
+                prescription=[
+                    "Keep intensity; prioritize balance + power; prevent falls.",
+                    "Purpose + community: keep showing up.",
+                ],
+            )
+        else:
+            lrp[k] = BucketNarrative(
+                title="Life Reclamation Path",
+                subtitle=f"Health • ages {lo}–{lo+5}",
+                diagnosis=["Longevity phase: functional independence is the goal."],
+                prescription=[
+                    "Strength minimums, daily walking, mobility, social connection.",
+                    "Simplify and protect the essentials.",
+                ],
+            )
+
+    return sal, lrp
 
 
-# ----------------------------
-# LAYOUT
-# ----------------------------
-left, center, right = st.columns([2.6, 5.2, 2.6], gap="large")
-
-copy = get_copy(MODE, (start_age, end_age))
+SAL_NARR, LRP_NARR = build_narratives()
 
 
-# LEFT PANEL
-with left:
-    if MODE == "SAL":
-        # Age-by-age bullets for SAL
-        age_bullets = build_sal_age_bullets((start_age, end_age))
-        st.markdown(
-            f"""
-<div class="left-card">
-  <div style="font-weight:900; font-size:20px; margin-bottom:10px;">{copy["left_title"]}</div>
-  <ul class="age-bullets">
-    {''.join([f"<li>{b}</li>" for b in age_bullets])}
-  </ul>
-</div>
-""",
-            unsafe_allow_html=True,
+# -----------------------------
+# Trajectory math
+# -----------------------------
+def clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def smoothstep(t: float) -> float:
+    # cubic smoothstep 0..1
+    t = clamp(t, 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def health_score(age: int, mode: str) -> float:
+    """
+    0..100 (higher is better).
+    SAL: gradual decline then steeper; death around 77.
+    LRP: baseline okay, switchback at 55, peak ~60, then slow decline; still functional at 92.
+    """
+    a = float(age)
+    if mode == "SAL":
+        # good early, then drift, then compounding
+        # piecewise curve with accelerated decline after 55
+        base = 92 - 0.35 * a  # slow erosion
+        accel = 0.0
+        if a > 40:
+            accel += (a - 40) * 0.55
+        if a > 55:
+            accel += (a - 55) * 1.10
+        if a > 70:
+            accel += (a - 70) * 1.60
+        s = base - accel
+        # “death” around 77: force near-zero thereafter
+        if a >= 77:
+            s = 2.0
+        return clamp(s, 0, 100)
+
+    # LRP
+    # before switchback: mild drift (but not catastrophic)
+    if a < SWITCHBACK_AGE:
+        s = 90 - 0.20 * a
+        return clamp(s, 0, 100)
+
+    # after switchback: improve over ~5 years, peak at 60, then slow decline
+    # improvement from age 55 to 60
+    t = (a - SWITCHBACK_AGE) / 5.0  # 0..1 at age 60
+    improve = 18 * smoothstep(t)  # up to +18
+    # slow decline after 60
+    decline = 0.0
+    if a > 60:
+        decline += (a - 60) * 0.45
+    if a > 75:
+        decline += (a - 75) * 0.55
+    if a > 85:
+        decline += (a - 85) * 0.70
+
+    # baseline at 55
+    s0 = 90 - 0.20 * SWITCHBACK_AGE
+    s = s0 + improve - decline
+
+    # keep functional at 92 (roughly 45–60)
+    if a >= 92:
+        s = max(s, 48.0)
+    return clamp(s, 0, 100)
+
+
+def wealth_score(age: int, mode: str) -> float:
+    """
+    0..100 (higher is better).
+    SAL: modest climb, stress dips, late-life drawdown risk.
+    LRP: similar climb but with better intentionality, lower stress drag, more “memory dividends.”
+    """
+    a = float(age)
+
+    # base accumulation curve (slow early, faster mid-career, taper)
+    # logistic-ish
+    accum = 100 / (1 + math.exp(-(a - 45) / 10))
+    accum = (accum - 5) * 1.05  # shift/scale
+
+    if mode == "SAL":
+        # stress / obligations / reactive decisions
+        drag = 0.0
+        if 25 <= a <= 55:
+            drag += 10 * smoothstep((a - 25) / 30)
+        if a > 55:
+            drag += 12 * smoothstep((a - 55) / 15)  # healthcare + late planning
+        if a > 70:
+            drag += 10 * smoothstep((a - 70) / 10)  # drawdown anxiety / costs
+        s = accum - drag
+        return clamp(s, 0, 100)
+
+    # LRP
+    # better systems, less drag, intentional spending windows
+    drag = 0.0
+    if 25 <= a <= 55:
+        drag += 6 * smoothstep((a - 25) / 30)
+    if a > 55:
+        drag += 5 * smoothstep((a - 55) / 15)
+    # slight uplift for “die-with-zero” style alignment (not hoarding)
+    uplift = 6 * smoothstep((a - 35) / 25)
+    s = accum - drag + uplift
+    return clamp(s, 0, 100)
+
+
+def silo_score(age: int, mode: str) -> float:
+    """
+    -100..+100 (below ground = autopilot / disconnection, above ground = presence / meaning).
+    SAL: trends downward; LRP: switchback flips upward and stabilizes.
+    """
+    a = float(age)
+
+    if mode == "SAL":
+        # early is neutral-to-positive, then screens/stress pull below ground
+        s = 25 - 1.2 * a
+        if a > 25:
+            s -= 10 * smoothstep((a - 25) / 20)
+        if a > 45:
+            s -= 18 * smoothstep((a - 45) / 15)
+        if a > 65:
+            s -= 10 * smoothstep((a - 65) / 12)
+        return clamp(s, -100, 100)
+
+    # LRP
+    if a < SWITCHBACK_AGE:
+        s = 20 - 0.45 * a  # small drift, not catastrophic
+        return clamp(s, -100, 100)
+
+    # post switchback: move above ground and stay
+    t = (a - SWITCHBACK_AGE) / 4.0  # faster shift
+    lift = 85 * smoothstep(t)  # up to +85
+    # a gentle decline very late
+    late = 0.0
+    if a > 80:
+        late = (a - 80) * 0.35
+    s0 = 20 - 0.45 * SWITCHBACK_AGE
+    s = s0 + lift - late
+    return clamp(s, -100, 100)
+
+
+def build_df(mode: str, max_age: int) -> pd.DataFrame:
+    ages = list(range(MIN_AGE, max_age + 1))
+    rows = []
+    for age in ages:
+        rows.append(
+            {
+                "age": age,
+                "health": health_score(age, mode),
+                "wealth": wealth_score(age, mode),
+                "silo": silo_score(age, mode),
+            }
         )
-    else:
-        # Curated bullets for LRP
-        st.markdown(
-            f"""
-<div class="left-card">
-  <div style="font-weight:900; font-size:20px; margin-bottom:10px;">{copy["left_title"]}</div>
-  <ul style="margin:0; padding-left:20px; line-height:1.7;">
-    {''.join([f"<li>{b}</li>" for b in copy["bullets"]])}
-  </ul>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+    return pd.DataFrame(rows)
 
 
-# RIGHT PANEL (rounded rectangles with room for “quotes”)
-def right_card(title: str, icon: str, body: str):
-    st.markdown(
-        f"""
-<div class="right-card">
-  <div class="right-title"><span class="right-icon">{icon}</span> {title}</div>
-  <div class="right-body">{body}</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-with right:
-    right_card("Diagnosis", "🩺", copy["diag"])
-    right_card("Prescription", "📋", copy["rx"])
-    right_card("Check Engine Light", "🟢", copy["ce"])
+# -----------------------------
+# Plot helpers
+# -----------------------------
+def health_band_label(h: float) -> str:
+    if h >= 70:
+        return "Fit"
+    if h >= 45:
+        return "Functional"
+    return "Frail"
 
 
-# ----------------------------
-# BUILD SERIES
-# ----------------------------
-sal_x, sal_y = interpolate_from_knots(SAL_KNOTS, 0, 77, 1)
-lrp_x, lrp_y = interpolate_from_knots(LRP_KNOTS, 55, 92, 1)
-
-if MODE == "SAL":
-    active_x, active_y = segment_between(sal_x, sal_y, start_age, end_age)
-else:
-    active_x, active_y = segment_between(lrp_x, lrp_y, start_age, end_age)
+def wealth_band_label(w: float) -> str:
+    if w >= 70:
+        return "Rich"
+    if w >= 40:
+        return "Enough"
+    return "Poor"
 
 
-# ----------------------------
-# PLOT
-# ----------------------------
-fig = go.Figure()
+def plot_timeline(df: pd.DataFrame, title: str, y_label: str, y_min: float, y_max: float,
+                  switchback_age: int = SWITCHBACK_AGE, switchback_label: str = "Hitting the Switchback") -> go.Figure:
+    fig = go.Figure()
 
-SAL_BASE = "rgba(180,80,80,0.33)"
-SAL_ACTIVE = "rgba(160,60,60,1.0)"
-LRP_BASE = "rgba(0,120,70,0.55)"
-LRP_ACTIVE = "rgba(0,120,70,1.0)"
-
-if MODE == "SAL":
-    fig.add_trace(go.Scatter(x=sal_x, y=sal_y, mode="lines", name="SAL", line=dict(color=SAL_BASE, width=5), hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=active_x, y=active_y, mode="lines", name="SAL active", line=dict(color=SAL_ACTIVE, width=10), hoverinfo="skip"))
-    if show_other:
-        fig.add_trace(go.Scatter(x=lrp_x, y=lrp_y, mode="lines", name="LRP (compare)", line=dict(color=LRP_BASE, width=4), hoverinfo="skip"))
-else:
-    fig.add_trace(go.Scatter(x=lrp_x, y=lrp_y, mode="lines", name="LRP", line=dict(color=LRP_BASE, width=5), hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=active_x, y=active_y, mode="lines", name="LRP active", line=dict(color=LRP_ACTIVE, width=10), hoverinfo="skip"))
-    if show_other:
-        fig.add_trace(go.Scatter(x=sal_x, y=sal_y, mode="lines", name="SAL (compare)", line=dict(color=SAL_BASE, width=4), hoverinfo="skip"))
-
-# SAL death marker (if SAL visible)
-if MODE == "SAL" or show_other:
     fig.add_trace(
         go.Scatter(
-            x=[77],
-            y=[sal_y[-1]],
-            mode="markers+text",
-            name="SAL death",
-            marker=dict(size=9, color="rgba(160,60,60,0.85)"),
-            text=["77"],
-            textposition="bottom center",
-            hoverinfo="skip",
+            x=df["age"],
+            y=df[title],
+            mode="lines",
+            line=dict(width=5),
+            hovertemplate="Age %{x}<br>" + title.capitalize() + ": %{y:.1f}<extra></extra>",
+            name=title.capitalize(),
         )
     )
 
-fig.update_layout(
-    height=560,
-    margin=dict(l=30, r=15, t=10, b=40),
-    plot_bgcolor="rgba(245,240,232,1)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-)
-
-fig.update_xaxes(title_text="Age", range=[0, 92], showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
-fig.update_yaxes(range=[0, 100], showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
-
-for y, label in [(80, "Fit"), (50, "Functional"), (20, "Frail")]:
+    # Switchback marker
+    fig.add_vline(
+        x=switchback_age,
+        line_width=2,
+        line_dash="dash",
+        opacity=0.9,
+    )
     fig.add_annotation(
-        x=2,
-        y=y,
-        text=label,
-        showarrow=False,
-        font=dict(size=14, color="rgba(0,0,0,0.45)"),
+        x=switchback_age,
+        y=y_max,
         xanchor="left",
-        yanchor="middle",
+        yanchor="top",
+        text=f"<b>{switchback_label}</b><br><span style='font-size:12px;opacity:0.75'>Age {switchback_age}</span>",
+        showarrow=False,
+        bgcolor="rgba(0,0,0,0.35)",
+        bordercolor="rgba(255,255,255,0.18)",
+        borderwidth=1,
+        borderpad=8,
     )
 
-with center:
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        height=330,
+        margin=dict(l=20, r=16, t=20, b=20),
+        xaxis=dict(title="Age", range=[MIN_AGE, int(df["age"].max())]),
+        yaxis=dict(title=y_label, range=[y_min, y_max]),
+        showlegend=False,
+    )
+    return fig
 
-st.caption("Bullets and cards now change by window. In SAL mode, the left panel shows age-by-age drift bullets for the selected range.")
+
+def plot_health(df: pd.DataFrame) -> go.Figure:
+    # Add Fit/Functional/Frail bands
+    fig = plot_timeline(df, "health", "Health (Fit → Frail)", 0, 100)
+    fig.add_hrect(y0=70, y1=100, opacity=0.10, line_width=0)
+    fig.add_hrect(y0=45, y1=70, opacity=0.07, line_width=0)
+    fig.add_hrect(y0=0, y1=45, opacity=0.10, line_width=0)
+    fig.add_annotation(x=2, y=95, text="<b>Fit</b>", showarrow=False, opacity=0.7)
+    fig.add_annotation(x=2, y=58, text="<b>Functional</b>", showarrow=False, opacity=0.65)
+    fig.add_annotation(x=2, y=18, text="<b>Frail</b>", showarrow=False, opacity=0.7)
+    return fig
+
+
+def plot_wealth(df: pd.DataFrame) -> go.Figure:
+    fig = plot_timeline(df, "wealth", "Wealth (Poor → Rich)", 0, 100)
+    fig.add_hrect(y0=70, y1=100, opacity=0.10, line_width=0)
+    fig.add_hrect(y0=40, y1=70, opacity=0.07, line_width=0)
+    fig.add_hrect(y0=0, y1=40, opacity=0.10, line_width=0)
+    fig.add_annotation(x=2, y=95, text="<b>Rich</b>", showarrow=False, opacity=0.7)
+    fig.add_annotation(x=2, y=55, text="<b>Enough</b>", showarrow=False, opacity=0.65)
+    fig.add_annotation(x=2, y=16, text="<b>Poor</b>", showarrow=False, opacity=0.7)
+    return fig
+
+
+def plot_silo(df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=df["age"],
+            y=df["silo"],
+            mode="lines",
+            line=dict(width=5),
+            hovertemplate="Age %{x}<br>SILO: %{y:.0f}<extra></extra>",
+            name="SILO",
+        )
+    )
+
+    # Ground line at 0
+    fig.add_hline(y=0, line_width=2, line_dash="solid", opacity=0.65)
+
+    # Switchback marker
+    fig.add_vline(x=SWITCHBACK_AGE, line_width=2, line_dash="dash", opacity=0.9)
+    fig.add_annotation(
+        x=SWITCHBACK_AGE,
+        y=100,
+        xanchor="left",
+        yanchor="top",
+        text=f"<b>Hitting the Switchback</b><br><span style='font-size:12px;opacity:0.75'>Age {SWITCHBACK_AGE}</span>",
+        showarrow=False,
+        bgcolor="rgba(0,0,0,0.35)",
+        bordercolor="rgba(255,255,255,0.18)",
+        borderwidth=1,
+        borderpad=8,
+    )
+
+    # Light shading below ground
+    fig.add_hrect(y0=-100, y1=0, opacity=0.08, line_width=0)
+
+    fig.update_layout(
+        height=330,
+        margin=dict(l=20, r=16, t=20, b=20),
+        xaxis=dict(title="Age", range=[MIN_AGE, int(df["age"].max())]),
+        yaxis=dict(title="SILO (Below-ground → Above-ground)", range=[-100, 100]),
+        showlegend=False,
+    )
+    fig.add_annotation(x=2, y=75, text="<b>Above ground</b>", showarrow=False, opacity=0.65)
+    fig.add_annotation(x=2, y=-75, text="<b>Below ground</b>", showarrow=False, opacity=0.65)
+    return fig
+
+
+# -----------------------------
+# Threshold view (Gandalf-style)
+# -----------------------------
+def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
+    h = hex_color.strip("#")
+    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _interp_color(c1: str, c2: str, t: float) -> str:
+    r1, g1, b1 = _hex_to_rgb(c1)
+    r2, g2, b2 = _hex_to_rgb(c2)
+    r = int(r1 + (r2 - r1) * t)
+    g = int(g1 + (g2 - g1) * t)
+    b = int(b1 + (b2 - b1) * t)
+    return f"rgb({r},{g},{b})"
+
+
+def _bar_gradient_html(value_0_100: float, c_lo: str, c_hi: str, label: str, sublabel: str) -> str:
+    """
+    Horizontal gradient bar with a marker for the current value.
+    """
+    v = clamp(value_0_100, 0, 100)
+    # marker position in %
+    marker_left = v
+
+    # marker color: slightly brighter
+    marker_color = _interp_color(c_lo, c_hi, v / 100.0)
+
+    return f"""
+<div class="bar-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;">
+    <div>
+      <div style="font-weight:700;font-size:1.05rem;">{label}</div>
+      <div class="tiny-muted">{sublabel}</div>
+    </div>
+    <div class="pill"><b>{v:.0f}</b> / 100</div>
+  </div>
+
+  <div style="height:14px;"></div>
+
+  <div style="position:relative;height:20px;border-radius:999px;
+              background: linear-gradient(90deg, {c_lo}, {c_hi});
+              border: 1px solid rgba(255,255,255,0.14);">
+    <div style="position:absolute;left:{marker_left}%;top:-8px;transform:translateX(-50%);
+                width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;
+                border-bottom:10px solid rgba(255,255,255,0.85);"></div>
+    <div style="position:absolute;left:{marker_left}%;top:0;transform:translateX(-50%);
+                width:3px;height:20px;border-radius:99px;background: rgba(0,0,0,0.35);
+                box-shadow: 0 0 0 2px rgba(255,255,255,0.25), 0 0 14px {marker_color};"></div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:8px;" class="tiny-muted">
+    <div>Low</div><div>High</div>
+  </div>
+</div>
+"""
+
+
+def _silo_threshold_html(value_m100_p100: float, label: str, sublabel: str) -> str:
+    """
+    SILO: below-ground filled gray / above-ground outline
+    Render as a vertical-ish “ground” concept but still horizontal for simplicity.
+    """
+    v = clamp(value_m100_p100, -100, 100)
+
+    # map -100..+100 to 0..100 for position
+    pos = (v + 100) / 2
+
+    # below-ground fill %
+    below_fill = clamp((0 - v) / 100.0, 0.0, 1.0)  # 0..1
+    below_fill_pct = below_fill * 100
+
+    # “above ground” outline intensity
+    above_pct = clamp((v / 100.0), 0.0, 1.0) * 100
+
+    return f"""
+<div class="bar-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;">
+    <div>
+      <div style="font-weight:700;font-size:1.05rem;">{label}</div>
+      <div class="tiny-muted">{sublabel}</div>
+    </div>
+    <div class="pill"><b>{v:.0f}</b> / 100</div>
+  </div>
+
+  <div style="height:14px;"></div>
+
+  <!-- groundline -->
+  <div class="groundline"></div>
+
+  <div style="height:10px;"></div>
+
+  <!-- below ground: filled gray -->
+  <div style="position:relative;height:20px;border-radius:999px;
+              background: rgba(255,255,255,0.04);
+              border: 1px solid rgba(255,255,255,0.14); overflow:hidden;">
+    <div style="position:absolute;left:0;top:0;height:20px;width:{below_fill_pct}%;
+                background: rgba(190,190,190,0.55);"></div>
+
+    <!-- above ground: outline only -->
+    <div style="position:absolute;left:0;top:0;height:20px;width:{above_pct}%;
+                border: 2px solid rgba(240,240,240,0.55); border-right:none;
+                box-sizing:border-box; border-radius:999px;"></div>
+
+    <!-- marker -->
+    <div style="position:absolute;left:{pos}%;top:-8px;transform:translateX(-50%);
+                width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;
+                border-bottom:10px solid rgba(255,255,255,0.85);"></div>
+    <div style="position:absolute;left:{pos}%;top:0;transform:translateX(-50%);
+                width:3px;height:20px;border-radius:99px;background: rgba(0,0,0,0.35);
+                box-shadow: 0 0 0 2px rgba(255,255,255,0.25);"></div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:8px;" class="tiny-muted">
+    <div>Below ground</div><div>Above ground</div>
+  </div>
+</div>
+"""
+
+
+def threshold_view(mode: str, age: int):
+    df = build_df(mode, max_age=MAX_AGE)
+
+    h = float(df.loc[df["age"] == age, "health"].iloc[0])
+    w = float(df.loc[df["age"] == age, "wealth"].iloc[0])
+    s = float(df.loc[df["age"] == age, "silo"].iloc[0])
+
+    # band labels
+    hb = health_band_label(h)
+    wb = wealth_band_label(w)
+    sb = "Above ground" if s >= 0 else "Below ground"
+
+    st.markdown(
+        f"""
+<div class="lrp-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:1.2rem;font-weight:800;">Threshold View</div>
+      <div class="small-muted">A quick “at-a-glance” readout for <b>{mode}</b> at <b>Age {age}</b>.</div>
+    </div>
+    <div class="pill">Switchback at <b>55</b> → <span style="opacity:0.8;">Hitting the Switchback</span></div>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3 = st.columns([1, 1, 1])
+
+    with c1:
+        st.markdown(
+            _bar_gradient_html(
+                h,
+                c_lo="#B00020",   # deep red
+                c_hi="#00C853",   # green
+                label="Health",
+                sublabel=f"Band: <b>{hb}</b> (red → green)",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(
+            _bar_gradient_html(
+                w,
+                c_lo="#FFB300",   # amber
+                c_hi="#00BFA5",   # teal
+                label="Wealth",
+                sublabel=f"Band: <b>{wb}</b> (amber → teal)",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with c3:
+        st.markdown(
+            _silo_threshold_html(
+                s,
+                label="SILO (Presence / Meaning)",
+                sublabel=f"State: <b>{sb}</b> (below-ground fill / above-ground outline)",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    # Small legend / interpretation row
+    st.markdown(
+        f"""
+<div class="lrp-card" style="margin-top:12px;">
+  <div style="font-weight:700;margin-bottom:6px;">Interpretation</div>
+  <div class="small-muted">
+    Health at <b>{h:.0f}</b> suggests <b>{hb}</b> capacity.
+    Wealth at <b>{w:.0f}</b> suggests <b>{wb}</b> stability.
+    SILO at <b>{s:.0f}</b> suggests <b>{sb}</b> orientation.
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+# -----------------------------
+# Timeline view
+# -----------------------------
+def timeline_view(mode: str, age: int, max_age: int):
+    df = build_df(mode, max_age=max_age)
+
+    # Current values
+    row = df.loc[df["age"] == age].iloc[0]
+    h, w, s = float(row["health"]), float(row["wealth"]), float(row["silo"])
+
+    # Narrative bucket
+    key = _bucket_key(age)
+    narr = (SAL_NARR if mode == "SAL" else LRP_NARR).get(key, None)
+
+    # Header card
+    st.markdown(
+        f"""
+<div class="lrp-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:1.2rem;font-weight:800;">Timeline View</div>
+      <div class="small-muted">Age-by-age trajectory for <b>{mode}</b> (with the Switchback at <b>55</b>).</div>
+    </div>
+    <div class="pill">Age {age} • Health <b>{h:.0f}</b> • Wealth <b>{w:.0f}</b> • SILO <b>{s:.0f}</b></div>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    left, right = st.columns([1.25, 1])
+
+    with left:
+        st.plotly_chart(plot_health(df), use_container_width=True)
+        st.plotly_chart(plot_wealth(df), use_container_width=True)
+        st.plotly_chart(plot_silo(df), use_container_width=True)
+
+    with right:
+        # Narrative panel
+        if narr is None:
+            st.markdown(
+                """
+<div class="lrp-card">
+  <div style="font-weight:800;font-size:1.05rem;">Narrative</div>
+  <div class="small-muted">No narrative found for this age bucket.</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+<div class="lrp-card">
+  <div style="font-weight:900;font-size:1.05rem;">{narr.title}</div>
+  <div class="small-muted" style="margin-top:2px;">{narr.subtitle} • <b>Bucket {key}</b></div>
+
+  <div style="height:10px;"></div>
+
+  <div style="font-weight:800;">Diagnosis</div>
+  <ul style="margin-top:6px;">
+    {''.join([f'<li>{x}</li>' for x in narr.diagnosis])}
+  </ul>
+
+  <div style="height:6px;"></div>
+
+  <div style="font-weight:800;">Prescription</div>
+  <ul style="margin-top:6px;">
+    {''.join([f'<li>{x}</li>' for x in narr.prescription])}
+  </ul>
+
+  <div style="height:10px;"></div>
+  <div class="tiny-muted">
+    Tip: If you want the subheading text to subtly change by age for SAL (instead of staying constant),
+    we can add a dedicated SAL “headline-by-bucket” map the same way this narrative works.
+  </div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+        # Switchback explainer
+        if age < SWITCHBACK_AGE:
+            sb_text = "The switchback is ahead — the default slope still feels manageable."
+        elif age == SWITCHBACK_AGE:
+            sb_text = "You are at the switchback — this is where trajectory becomes intentional."
+        else:
+            sb_text = "Past the switchback — compounding returns (or compounding costs) dominate."
+
+        st.markdown(
+            f"""
+<div class="lrp-card" style="margin-top:12px;">
+  <div style="font-weight:800;">Switchback Check</div>
+  <div class="small-muted" style="margin-top:6px;">{sb_text}</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+
+# -----------------------------
+# Sidebar controls
+# -----------------------------
+st.title("🧭 Life Reclamation Dashboard")
+st.caption("Single-file Streamlit app • Timeline + Threshold views • SAL vs LRP modes")
+
+with st.sidebar:
+    st.header("Controls")
+
+    view = st.radio(
+        "View",
+        ["Timeline view", "Threshold view"],
+        index=0,
+    )
+
+    mode = st.radio(
+        "Mode",
+        ["SAL", "LRP"],
+        index=0,
+        help="SAL = default trajectory. LRP = Life Reclamation Path (switchback at age 55).",
+    )
+
+    max_age = st.slider(
+        "Max age shown on timeline",
+        min_value=80,
+        max_value=100,
+        value=92 if mode == "LRP" else 85,
+        step=1,
+    )
+
+    age = st.slider(
+        "Age",
+        min_value=MIN_AGE,
+        max_value=max_age,
+        value=min(55, max_age),
+        step=1,
+    )
+
+    st.divider()
+    st.markdown(
+        """
+**Legend**
+- Health: Fit / Functional / Frail
+- Wealth: Poor / Enough / Rich
+- SILO: Below-ground ↔ Above-ground
+"""
+    )
+
+# -----------------------------
+# Main render
+# -----------------------------
+if view == "Threshold view":
+    threshold_view(mode=mode, age=age)
+else:
+    timeline_view(mode=mode, age=age, max_age=max_age)
+
+# Footer note
+st.markdown(
+    """
+<div class="tiny-muted" style="margin-top:18px;opacity:0.85;">
+Built for the Life Reclamation Project. Switchback marker is fixed at age 55 (“Hitting the Switchback”).
+</div>
+""",
+    unsafe_allow_html=True,
+)
