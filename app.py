@@ -5,7 +5,7 @@ import textwrap
 st.set_page_config(page_title="LRP — Health", layout="wide")
 
 # =============================
-# GLOBAL UI SCALE (tuned for 100% on laptop)
+# GLOBAL UI SCALE (fits 100% better)
 # =============================
 UI_SCALE = 0.86
 
@@ -13,11 +13,11 @@ def rem(x):
     return f"{x * UI_SCALE}rem"
 
 def md(html: str):
-    """Render HTML safely without accidental markdown code-block indentation."""
+    """Render HTML safely (prevents accidental code-block / raw HTML showing)."""
     st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
 
 # -----------------------------
-# Mountains (soft, atmospheric)
+# Soft background mountains (optional, subtle)
 # -----------------------------
 MOUNTAIN_SVG = """
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420">
@@ -35,7 +35,7 @@ MTN_URI = svg_uri(MOUNTAIN_SVG)
 
 ENGINE_SVG = """
 <svg viewBox="0 0 64 64" aria-hidden="true">
-  <g fill="none" stroke="currentColor" stroke-width="5.3" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="currentColor" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M18 22 h24 v20 H18 z"/>
     <path d="M24 22 v-6 h12 v6"/>
     <path d="M18 30 h-6 v8 h6"/>
@@ -45,11 +45,13 @@ ENGINE_SVG = """
 </svg>
 """
 
+# NOTE: TOP SAFE AREA is the key fix here.
+# Streamlit Cloud's top-right chrome can overlap. This padding prevents clipping.
 md(f"""
 <style>
-/* Keep content high, but never clip */
+/* Safe top gutter so nothing clips under Streamlit Cloud chrome */
 .block-container {{
-  padding-top: {rem(0.95)};
+  padding-top: {rem(1.55)};
   padding-bottom: {rem(0.9)};
 }}
 
@@ -156,46 +158,18 @@ md(f"""
   border: 1px solid rgba(0,0,0,0.14);
   background: rgba(0,0,0,0.02);
   color: rgba(0,150,80,0.95);
-  padding: {rem(0.25)};
+  padding: {rem(0.18)};
 }}
 .engine svg {{
-  width: 95%;
-  height: 95%;
+  width: 98%;
+  height: 98%;
 }}
 
-.nav-pill {{
-  display:flex;
-  flex-direction:column;
-  gap: {rem(0.55)};
-}}
-.nav-title {{
-  font-weight: 800;
-  font-size: {rem(0.95)};
-  color: rgba(0,0,0,0.70);
-}}
-.track {{
-  width: 100%;
-  height: {rem(0.45)};
-  border-radius: 999px;
-  background: rgba(0,0,0,0.08);
-  position: relative;
-  overflow: hidden;
-}}
-.track-fill {{
-  height: 100%;
-  border-radius: 999px;
-  background: rgba(220,0,0,0.65);
-  width: var(--pct);
-}}
-.nav-buttons {{
-  display:flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: {rem(0.6)};
-}}
-.small {{
-  font-size: {rem(0.82)};
-  color: rgba(0,0,0,0.55);
+/* Make Streamlit buttons look more "slide-native" */
+div.stButton > button {{
+  border-radius: 12px;
+  padding: 0.55rem 0.85rem;
+  font-weight: 650;
 }}
 </style>
 
@@ -210,11 +184,12 @@ BANDS = [
     (0, 5, "Health is assumed and unexamined."),
     (5, 10, "Activity is natural and effortless."),
 ]
+
 if "idx" not in st.session_state:
     st.session_state.idx = 0
 
 def health_value(age: float) -> float:
-    # keep the curve you liked (no changes)
+    # Keep your curve
     if age <= 10:
         return 92.0
     if age <= 55:
@@ -225,64 +200,54 @@ def health_value(age: float) -> float:
         return 35.0 - 20.0 * (t ** 1.2)
     return None
 
-# -----------------------------
-# TOP ROW: Title | Nav | Bullets
-# -----------------------------
-col_title, col_nav, col_bul = st.columns([1.45, 0.95, 1.70], gap="large")
-
 a0, a1, band_title = BANDS[st.session_state.idx]
-pct = (st.session_state.idx + 1) / len(BANDS) * 100
+
+# -----------------------------
+# TOP ROW: Title | Buttons | Bullets
+# -----------------------------
+col_title, col_nav, col_bul = st.columns([1.45, 0.75, 1.70], gap="large")
 
 with col_title:
     md(f"""
-    <div class="lrp-card">
-      <div class="lrp-title">HEALTH · SAL · Ages {a0}–{a1}</div>
-
-      <div class="dict-line">
-        <div class="dict-head">health</div>
-        <div class="dict-meta">• noun</div>
-      </div>
-
-      <div class="dict-pron">/helTH/</div>
-
-      <div class="dict-def"><div class="dict-num">1)</div><div>the absence of disease or infirmity</div></div>
-      <div class="dict-def"><div class="dict-num">2)</div><div>also: the capacity to live, move, and engage fully with life</div></div>
-    </div>
-    """)
+<div class="lrp-card">
+  <div class="lrp-title">HEALTH · SAL · Ages {a0}–{a1}</div>
+  <div class="dict-line">
+    <div class="dict-head">health</div>
+    <div class="dict-meta">• noun</div>
+  </div>
+  <div class="dict-pron">/helTH/</div>
+  <div class="dict-def"><div class="dict-num">1)</div><div>the absence of disease or infirmity</div></div>
+  <div class="dict-def"><div class="dict-num">2)</div><div>also: the capacity to live, move, and engage fully with life</div></div>
+</div>
+""")
 
 with col_nav:
-    md(f"""
-    <div class="lrp-card nav-pill">
-      <div class="nav-title">Ages {a0}–{a1}</div>
-      <div class="track" style="--pct:{pct:.0f}%;">
-        <div class="track-fill"></div>
-      </div>
-      <div class="small">Use buttons to advance</div>
-    </div>
-    """)
-
+    # Only the buttons (no track, no helper text)
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("◀ Previous", disabled=(st.session_state.idx == 0), use_container_width=True):
+        if st.button("◀", disabled=(st.session_state.idx == 0), use_container_width=True):
             st.session_state.idx -= 1
             st.rerun()
     with b2:
-        if st.button("Next ▶", disabled=(st.session_state.idx == len(BANDS)-1), use_container_width=True):
+        if st.button("▶", disabled=(st.session_state.idx == len(BANDS) - 1), use_container_width=True):
             st.session_state.idx += 1
             st.rerun()
 
+    # Small label so user knows where they are (optional but helpful)
+    st.caption(f"Ages {a0}–{a1}")
+
 with col_bul:
     md(f"""
-    <div class="lrp-card">
-      <div class="bullets-title">{band_title}</div>
-      <div class="bullets">
-        <div>• Unstructured play, exploration, bonding</div>
-        <div>• Sleep mostly protected</div>
-        <div>• Daycare illness disrupts rhythm</div>
-        <div>• Screens introduced occasionally</div>
-      </div>
-    </div>
-    """)
+<div class="lrp-card">
+  <div class="bullets-title">{band_title}</div>
+  <div class="bullets">
+    <div>• Unstructured play, exploration, bonding</div>
+    <div>• Sleep mostly protected</div>
+    <div>• Daycare illness disrupts rhythm</div>
+    <div>• Screens introduced occasionally</div>
+  </div>
+</div>
+""")
 
 st.write("")
 
@@ -343,24 +308,24 @@ l, r = st.columns([1.10, 2.90], gap="large")
 
 with l:
     md(f"""
-    <div class="lrp-card">
-      <div class="label">Diagnosis</div>
-      <div class="body">Everything looks normal and on track for age.</div>
+<div class="lrp-card">
+  <div class="label">Diagnosis</div>
+  <div class="body">Everything looks normal and on track for age.</div>
 
-      <div class="label" style="margin-top:{rem(0.75)};">Prescription</div>
-      <div class="body">
-        Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed.
-        Kids are resilient — there’s nothing to worry about.
-      </div>
+  <div class="label" style="margin-top:{rem(0.75)};">Prescription</div>
+  <div class="body">
+    Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed.
+    Kids are resilient — there’s nothing to worry about.
+  </div>
 
-      <div class="label" style="margin-top:{rem(0.85)};">Check Engine</div>
-      <div class="engine" title="Engine status (green)">{ENGINE_SVG}</div>
-    </div>
-    """)
+  <div class="label" style="margin-top:{rem(0.85)};">Check Engine</div>
+  <div class="engine" title="Engine status (green)">{ENGINE_SVG}</div>
+</div>
+""")
 
 with r:
     md('<div class="lrp-card">')
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     md("</div>")
 
-md("</div>")  # close .lrp-layer
+md("</div>")  # close lrp-layer
