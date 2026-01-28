@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="LRP Slide — Health", layout="wide")
 
 # -----------------------------
-# Background mountains (full-bottom band + side hints)
+# Background mountains (bottom band + side hints)
 # -----------------------------
 MOUNTAIN_SVG_FAR = """
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520">
@@ -27,9 +27,8 @@ def svg_data_uri(svg: str) -> str:
 far_uri = svg_data_uri(MOUNTAIN_SVG_FAR)
 near_uri = svg_data_uri(MOUNTAIN_SVG_NEAR)
 
-# Colorable inline engine icon (uses currentColor)
 ENGINE_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 64 64" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true">
   <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
     <path d="M18 22 h24 v20 H18 z"/>
     <path d="M24 22 v-6 h12 v6"/>
@@ -50,24 +49,33 @@ f"""
     background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,250,250,1) 100%);
   }}
 
+  /* Pull everything up */
+  .block-container {{
+    position: relative;
+    z-index: 1;
+    padding-top: 0.05rem;
+    padding-bottom: 1.0rem;
+  }}
+  .block-container > div:first-child {{
+    margin-top: -0.8rem;
+  }}
+
   /* Full-width bottom band (continues behind everything) */
   .lrp-mtn-bottom {{
     position: fixed;
     left: 0;
     right: 0;
     bottom: -2vh;
-    height: 52vh;
+    height: 54vh;
     background-image: url("{far_uri}"), url("{near_uri}");
     background-repeat: repeat-x, repeat-x;
     background-size: 85% auto, 92% auto;
     background-position: 38% 92%, 52% 104%;
     pointer-events: none;
     z-index: 0;
-
-    /* This is the "range rises left->right then reappears on right" illusion */
     clip-path: polygon(
-      0% 76%,
-      45% 76%,
+      0% 78%,
+      45% 78%,
       70% 70%,
       100% 58%,
       100% 100%,
@@ -75,13 +83,13 @@ f"""
     );
   }}
 
-  /* Side hints: bring right side closer */
+  /* Side hints */
   .lrp-mtn-left {{
     position: fixed;
     left: 0;
-    top: 70px;
+    top: 60px;
     width: 16vw;
-    height: calc(100vh - 70px);
+    height: calc(100vh - 60px);
     background-image: url("{far_uri}"), url("{near_uri}");
     background-repeat: no-repeat, no-repeat;
     background-size: 165% auto, 190% auto;
@@ -94,9 +102,9 @@ f"""
   .lrp-mtn-right {{
     position: fixed;
     right: 0;
-    top: 70px;
-    width: 34vw;              /* closer */
-    height: calc(100vh - 70px);
+    top: 60px;
+    width: 34vw;
+    height: calc(100vh - 60px);
     background-image: url("{far_uri}"), url("{near_uri}");
     background-repeat: no-repeat, no-repeat;
     background-size: 165% auto, 205% auto;
@@ -105,13 +113,6 @@ f"""
     pointer-events: none;
     z-index: 0;
     opacity: 0.95;
-  }}
-
-  .block-container {{
-    position: relative;
-    z-index: 1;
-    padding-top: 1.0rem;
-    padding-bottom: 1.0rem;
   }}
 
   .lrp-card {{
@@ -124,13 +125,13 @@ f"""
   }}
 
   .lrp-title {{
-    font-size: 1.55rem;
-    font-weight: 850;
+    font-size: 1.78rem; /* bigger slide heading */
+    font-weight: 900;
     margin: 0;
   }}
 
   .lrp-def {{
-    margin-top: 0.35rem;
+    margin-top: 0.40rem;
     font-size: 1.05rem;
     color: rgba(0,0,0,0.70);
     line-height: 1.35rem;
@@ -142,8 +143,8 @@ f"""
   }}
 
   .lrp-bullets-heading {{
-    font-size: 1.05rem;
-    font-weight: 850;
+    font-size: 1.08rem;
+    font-weight: 900;
     color: rgba(0,0,0,0.78);
     margin-bottom: 10px;
   }}
@@ -172,19 +173,29 @@ f"""
     margin-bottom: 6px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+  }}
+
+  .lrp-label .emoji {{
+    font-size: 1.35rem; /* bigger icons */
+    line-height: 1;
   }}
 
   .lrp-engine-pill {{
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 48px;
-    height: 36px;
-    border-radius: 999px;
+    width: 68px;   /* bigger so green reads */
+    height: 52px;
+    border-radius: 18px;
     border: 1px solid rgba(0,0,0,0.12);
     background: rgba(0,0,0,0.03);
-    color: rgba(0,160,80,0.92); /* green engine */
+    color: rgba(0,160,80,0.92);
+  }}
+
+  /* Tighten slider spacing */
+  div[data-testid="stSlider"] {{
+    padding-top: 0.15rem;
   }}
 </style>
 
@@ -196,8 +207,7 @@ unsafe_allow_html=True
 )
 
 # -----------------------------
-# Health SAL content (expand later)
-# Bullet heading = descriptive clause (bold)
+# Content (extend later)
 # -----------------------------
 HEALTH_SAL = {
     (0, 5): {
@@ -238,34 +248,51 @@ HEALTH_SAL = {
     },
 }
 
-# -----------------------------
-# SAL curve (single source of truth for now)
-# Line ends at 77 (blank 77–92 = "missing life")
-# -----------------------------
-def sal_health_value(age: int) -> float:
-    if age <= 10:
-        return 92.0
-    if age <= 40:
-        return 92.0 - (age - 10) * 0.55
-    if age <= 75:
-        return 75.0 - (age - 40) * 0.85
-    # Steeper drop into the SAL "end zone"
-    return max(5.0, 45.0 - (age - 75) * 3.5)
+bands = list(HEALTH_SAL.keys())
+band_labels = [f"{a}–{b}" for a, b in bands]
 
 # -----------------------------
-# Selector (hidden label)
+# SAL health curve:
+# - high early
+# - by age 55 near upper frail / lower functional (≈35)
+# - line ends at 77 (blank 77–92)
 # -----------------------------
-bands = list(HEALTH_SAL.keys())
-idx = st.slider("Age band", 0, len(bands) - 1, 0, label_visibility="collapsed")
+def sal_health_value(age: int) -> float:
+    # 0–10: Fit plateau
+    if age <= 10:
+        return 92.0
+
+    # 10–55: decline to ~35
+    if age <= 55:
+        start_y = 92.0
+        end_y = 35.0
+        t = (age - 10) / (55 - 10)
+        return start_y + (end_y - start_y) * t
+
+    # 55–77: decline to ~15 (deep frail by the end)
+    if age <= 77:
+        start_y = 35.0
+        end_y = 15.0
+        t = (age - 55) / (77 - 55)
+        return start_y + (end_y - start_y) * t
+
+    # After 77, SAL line doesn't exist (we won't plot it)
+    return 15.0
+
+# -----------------------------
+# Top row: title card | slider | bullets card
+# -----------------------------
+col_title, col_slider, col_bullets = st.columns([1.35, 0.55, 1.75], gap="large")
+
+with col_slider:
+    # slider is now "right there for advancing"
+    idx = st.slider("Age band", 0, len(bands) - 1, 0)
+    st.caption(f"Ages {band_labels[idx]}")
+
 band = bands[idx]
 c = HEALTH_SAL[band]
 
-# -----------------------------
-# Header row: left title/defs, right bullets
-# -----------------------------
-left_hdr, right_hdr = st.columns([1.25, 1.75], gap="large")
-
-with left_hdr:
+with col_title:
     st.markdown(
 f"""
 <div class="lrp-card">
@@ -280,7 +307,7 @@ f"""
 unsafe_allow_html=True
     )
 
-with right_hdr:
+with col_bullets:
     b = c["bullets"]
     st.markdown(
 f"""
@@ -300,12 +327,11 @@ unsafe_allow_html=True
 st.write("")
 
 # -----------------------------
-# Plot:
-# - x-axis always 0–92
-# - SAL context line from 0–77 (light gray)
-# - Highlight segment (selected band) in red
+# Plot: x-axis 0–92
+# - context line 0–77 (light gray)
+# - highlight band segment (red)
 # -----------------------------
-ages_context = list(range(0, 78))   # 0..77 inclusive
+ages_context = list(range(0, 78))
 y_context = [sal_health_value(a) for a in ages_context]
 
 a0, a1 = band
@@ -314,34 +340,27 @@ y_seg = [sal_health_value(a) for a in ages_seg]
 
 fig = go.Figure()
 
-# Context line (thin, subtle)
 fig.add_trace(go.Scatter(
     x=ages_context,
     y=y_context,
     mode="lines",
-    line=dict(width=2.5, color="rgba(0,0,0,0.22)"),
+    line=dict(width=2.6, color="rgba(0,0,0,0.22)"),
     hoverinfo="skip",
 ))
 
-# Highlight segment (red)
 fig.add_trace(go.Scatter(
     x=ages_seg,
     y=y_seg,
     mode="lines",
-    line=dict(width=7, color="red"),
+    line=dict(width=8, color="red"),
     hoverinfo="skip",
 ))
 
 tickvals = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,77,80,85,90,92]
-ticktext = []
-for v in tickvals:
-    if v in (77, 92):
-        ticktext.append(f"<b>{v}</b>")
-    else:
-        ticktext.append(str(v))
+ticktext = [f"<b>{v}</b>" if v in (77, 92) else str(v) for v in tickvals]
 
 fig.update_layout(
-    height=470,
+    height=560,  # taller graph
     margin=dict(l=35, r=20, t=10, b=35),
     plot_bgcolor="white",
     paper_bgcolor="white",
@@ -374,13 +393,13 @@ with left:
     st.markdown(
 f"""
 <div class="lrp-card">
-  <div class="lrp-label">🩺 Diagnosis</div>
-  <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:14px;">
+  <div class="lrp-label"><span class="emoji">🩺</span> Diagnosis</div>
+  <div style="font-size:1.02rem; color:rgba(0,0,0,0.78); margin-bottom:14px;">
     {c["diagnosis"]}
   </div>
 
-  <div class="lrp-label">💊 Prescription</div>
-  <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:16px;">
+  <div class="lrp-label"><span class="emoji">💊</span> Prescription</div>
+  <div style="font-size:1.02rem; color:rgba(0,0,0,0.78); margin-bottom:18px;">
     {c["prescription"]}
   </div>
 
