@@ -4,19 +4,19 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="LRP Slide — Health", layout="wide")
 
 # -----------------------------
-# Mountain background (side-only, closer to content)
+# Background mountains (side + full-bottom band)
 # -----------------------------
 MOUNTAIN_SVG_FAR = """
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">
-  <path d="M0,420 L120,320 L240,380 L360,260 L480,340 L600,220 L720,320 L900,240 L900,500 L0,500 Z"
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+  <path d="M0,410 L140,315 L280,380 L420,250 L560,350 L700,215 L840,320 L1020,235 L1200,265 L1200,500 L0,500 Z"
         fill="rgba(0,0,0,0.05)"/>
 </svg>
 """
 
 MOUNTAIN_SVG_NEAR = """
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">
-  <path d="M0,460 L140,360 L280,430 L420,300 L560,410 L700,280 L820,370 L900,320 L900,500 L0,500 Z"
-        fill="rgba(0,0,0,0.10)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
+  <path d="M0,465 L170,360 L330,435 L510,295 L670,415 L840,275 L1000,365 L1200,310 L1200,500 L0,500 Z"
+        fill="rgba(0,0,0,0.11)"/>
 </svg>
 """
 
@@ -27,6 +27,30 @@ def svg_data_uri(svg: str) -> str:
 far_uri = svg_data_uri(MOUNTAIN_SVG_FAR)
 near_uri = svg_data_uri(MOUNTAIN_SVG_NEAR)
 
+# -----------------------------
+# Simple inline SVG "engine" icon (colorable)
+# -----------------------------
+ENGINE_SVG = """
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 64 64" aria-hidden="true">
+  <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <!-- engine block -->
+    <path d="M18 22 h24 v20 H18 z"/>
+    <!-- top intake -->
+    <path d="M24 22 v-6 h12 v6"/>
+    <!-- left pipe -->
+    <path d="M18 30 h-6 v8 h6"/>
+    <!-- right pipe -->
+    <path d="M42 30 h10 v8 H42"/>
+    <!-- bottom oil pan -->
+    <path d="M22 42 h16"/>
+    <!-- bolts / detail -->
+    <path d="M24 32 h0"/>
+    <path d="M32 32 h0"/>
+    <path d="M40 32 h0"/>
+  </g>
+</svg>
+"""
+
 st.markdown(
     f"""
     <style>
@@ -34,7 +58,7 @@ st.markdown(
         background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,250,250,1) 100%);
       }}
 
-      /* LEFT mountains slightly narrower */
+      /* Side mountain layers */
       .lrp-mtn-left {{
         position: fixed;
         left: 0;
@@ -43,26 +67,43 @@ st.markdown(
         height: calc(100vh - 70px);
         background-image: url("{far_uri}"), url("{near_uri}");
         background-repeat: no-repeat, no-repeat;
-        background-size: 140% auto, 155% auto;
-        background-position: left 55%, left 78%;
+        background-size: 155% auto, 175% auto;
+        background-position: left 55%, left 80%;
         pointer-events: none;
         z-index: 0;
       }}
 
-      /* RIGHT mountains closer / stronger */
       .lrp-mtn-right {{
         position: fixed;
         right: 0;
         top: 70px;
-        width: 26vw;
+        width: 28vw;
         height: calc(100vh - 70px);
         background-image: url("{far_uri}"), url("{near_uri}");
         background-repeat: no-repeat, no-repeat;
-        background-size: 145% auto, 165% auto;
-        background-position: right 50%, right 80%;
+        background-size: 155% auto, 185% auto;
+        background-position: right 50%, right 83%;
         transform: scaleX(-1);
         pointer-events: none;
         z-index: 0;
+      }}
+
+      /* Full-width bottom band so the range "continues behind the graph" */
+      .lrp-mtn-bottom {{
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 44vh;
+        background-image: url("{far_uri}"), url("{near_uri}");
+        background-repeat: repeat-x, repeat-x;
+        background-size: 85% auto, 95% auto;
+        background-position: 40% 90%, 55% 102%;
+        opacity: 1;
+        pointer-events: none;
+        z-index: 0;
+        /* Rise slightly left->right so it feels like the range continues */
+        clip-path: polygon(0% 72%, 55% 72%, 100% 58%, 100% 100%, 0% 100%);
       }}
 
       .block-container {{
@@ -99,11 +140,19 @@ st.markdown(
         color: rgba(0,0,0,0.78);
       }}
 
+      .lrp-bullets-heading {{
+        font-size: 0.95rem;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: rgba(0,0,0,0.55);
+        font-weight: 750;
+        margin-bottom: 8px;
+      }}
+
       .lrp-bullets-grid {{
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px 18px;
-        margin-top: 6px;
       }}
 
       .lrp-bullet {{
@@ -116,32 +165,36 @@ st.markdown(
         color: rgba(0,0,0,0.60);
       }}
 
-      .lrp-pill {{
-        display: inline-flex;
+      .lrp-label {{
+        font-size: 0.85rem;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: rgba(0,0,0,0.55);
+        margin-bottom: 6px;
+        display: flex;
         align-items: center;
         gap: 8px;
-        padding: 6px 10px;
+      }}
+
+      .lrp-icon {{
+        font-size: 1.0rem;
+        opacity: 0.85;
+      }}
+
+      .lrp-engine-pill {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 34px;
         border-radius: 999px;
         border: 1px solid rgba(0,0,0,0.12);
         background: rgba(0,0,0,0.03);
-        font-weight: 700;
-        font-size: 0.95rem;
-      }}
-
-      .lrp-dot {{
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: rgba(0,160,80,0.85);
-        border: 1px solid rgba(0,0,0,0.15);
-      }}
-
-      /* Remove Streamlit extra whitespace between widgets a bit */
-      div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stMarkdownContainer"]) {{
-        margin-bottom: 0.2rem;
+        color: rgba(0,160,80,0.90); /* green */
       }}
     </style>
 
+    <div class="lrp-mtn-bottom"></div>
     <div class="lrp-mtn-left"></div>
     <div class="lrp-mtn-right"></div>
     """,
@@ -149,7 +202,7 @@ st.markdown(
 )
 
 # -----------------------------
-# Content data (start with 0–5 and 5–10; add more later)
+# Content data (expand later)
 # -----------------------------
 HEALTH_SAL = {
     (0, 5): {
@@ -157,6 +210,7 @@ HEALTH_SAL = {
         "term": "health /helTH/",
         "def1": "the absence of disease or infirmity",
         "def2": "also: the capacity to live, move, and engage fully with life",
+        "summary_heading": "Life Snapshot",
         "chapter": "Beginnings — health is assumed and unexamined.",
         "bullets": [
             "Lots of unstructured play, exploration, and bonding with parents",
@@ -169,13 +223,14 @@ HEALTH_SAL = {
             "Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed. "
             "Kids are resilient — there’s nothing to worry about."
         ),
-        "check": "GREEN",
+        "engine_color": "green",
     },
     (5, 10): {
         "title": "HEALTH · SAL · Ages 5–10",
         "term": "health /helTH/",
         "def1": "the absence of disease or infirmity",
         "def2": "also: the capacity to live, move, and engage fully with life",
+        "summary_heading": "Life Snapshot",
         "chapter": "Momentum — activity is natural and effortless.",
         "bullets": [
             "Real play with friends is still common; movement happens naturally and joyfully",
@@ -188,21 +243,38 @@ HEALTH_SAL = {
             "Keep doing what you’re doing. Encourage activity, limit treats when you can, "
             "and address issues as they come up."
         ),
-        "check": "GREEN",
+        "engine_color": "green",
     },
 }
 
 # -----------------------------
-# Age band selector (simple slider)
+# Realistic SAL health curve (single-source-of-truth)
+# NOTE: This is the "real curve" function we’ll keep refining once we bring back
+# your canonical SAL points. For ages 0–10 it stays near Fit.
+# -----------------------------
+def sal_health_value(age: int) -> float:
+    # High early years
+    if age <= 10:
+        return 92.0
+    # gradual erosion into adulthood
+    if age <= 40:
+        return 92.0 - (age - 10) * 0.55
+    # faster decline midlife
+    if age <= 75:
+        return 75.0 - (age - 40) * 0.85
+    # end-stage slide (SAL "ends" around 75–77)
+    return max(5.0, 45.0 - (age - 75) * 3.5)
+
+# -----------------------------
+# Selector (hidden label)
 # -----------------------------
 bands = list(HEALTH_SAL.keys())
-band_labels = [f"{a}–{b}" for a, b in bands]
 band_index = st.slider("Age band", 0, len(bands) - 1, 0, label_visibility="collapsed")
 band = bands[band_index]
 content = HEALTH_SAL[band]
 
 # -----------------------------
-# Header card: title/defs on left, bullets on right (2×2)
+# Header: left title/defs, right bullets with heading
 # -----------------------------
 left_hdr, right_hdr = st.columns([1.25, 1.75], gap="large")
 
@@ -226,6 +298,7 @@ with right_hdr:
     st.markdown(
         f"""
         <div class="lrp-card">
+          <div class="lrp-bullets-heading">{content["summary_heading"]}</div>
           <div class="lrp-bullets-grid">
             <div class="lrp-bullet">• {b[0]}</div>
             <div class="lrp-bullet">• {b[1]}</div>
@@ -240,42 +313,33 @@ with right_hdr:
 st.write("")
 
 # -----------------------------
-# Graph: show ONLY the segment for the selected age band
+# Graph: tight band window (0–5 means 0..5 exactly)
 # -----------------------------
-# For now we use a simple baseline curve and just show the chosen segment.
-# Later we’ll drop in your finalized SAL curve.
-def sal_health_value(a: int) -> float:
-    if a <= 10:
-        return 92
-    if a <= 40:
-        return 92 - (a - 10) * 0.55
-    if a <= 75:
-        return 75 - (a - 40) * 0.85
-    return max(5, 45 - (a - 75) * 2.0)
-
 a0, a1 = band
 seg_ages = list(range(a0, a1 + 1))
 seg_y = [sal_health_value(a) for a in seg_ages]
 
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=seg_ages, y=seg_y, mode="lines", line=dict(width=5), hoverinfo="skip"))
-
-# Window the x-axis tightly around the band (gives more “zoomed-in” impact)
-pad_left = 1
-pad_right = 2
-x_min = max(0, a0 - pad_left)
-x_max = min(92, a1 + pad_right)
+fig.add_trace(
+    go.Scatter(
+        x=seg_ages,
+        y=seg_y,
+        mode="lines",
+        line=dict(width=6, color="red"),  # requested: health line red
+        hoverinfo="skip",
+    )
+)
 
 fig.update_layout(
-    height=460,
+    height=470,
     margin=dict(l=35, r=20, t=10, b=35),
     plot_bgcolor="white",
     paper_bgcolor="white",
     xaxis=dict(
         title="Age",
-        range=[x_min, x_max],
+        range=[a0, a1],  # tight
         tickmode="linear",
-        dtick=1 if (x_max - x_min) <= 10 else 5,
+        dtick=1,
         gridcolor="rgba(0,0,0,0.06)",
         zeroline=False,
     ),
@@ -291,37 +355,32 @@ fig.update_layout(
 )
 
 # -----------------------------
-# Bottom row: left "instruments" + big graph
+# Bottom row: left instruments + big graph
 # -----------------------------
 left, center = st.columns([1.05, 2.95], gap="large")
 
 with left:
-    # No "Chapter Descriptor" label — just the line itself as a quiet kicker
     st.markdown(
         f"""
         <div class="lrp-card">
-          <div style="font-weight:780; font-size:1.05rem; margin-bottom:12px;">
+          <div style="font-weight:820; font-size:1.05rem; margin-bottom:14px;">
             {content["chapter"]}
           </div>
 
-          <div style="font-size:0.85rem; letter-spacing:0.6px; text-transform:uppercase; color:rgba(0,0,0,0.55);">
-            Diagnosis
-          </div>
-          <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:12px;">
+          <div class="lrp-label"><span class="lrp-icon">🩺</span> Diagnosis</div>
+          <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:14px;">
             {content["diagnosis"]}
           </div>
 
-          <div style="font-size:0.85rem; letter-spacing:0.6px; text-transform:uppercase; color:rgba(0,0,0,0.55);">
-            Prescription
-          </div>
-          <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:14px;">
+          <div class="lrp-label"><span class="lrp-icon">💊</span> Prescription</div>
+          <div style="font-size:1.0rem; color:rgba(0,0,0,0.78); margin-bottom:16px;">
             {content["prescription"]}
           </div>
 
-          <div style="font-size:0.85rem; letter-spacing:0.6px; text-transform:uppercase; color:rgba(0,0,0,0.55); margin-bottom:6px;">
-            Check Engine
+          <div class="lrp-label">Check Engine</div>
+          <div class="lrp-engine-pill" title="Engine status (green)">
+            {ENGINE_SVG}
           </div>
-          <div class="lrp-pill"><span class="lrp-dot"></span> {content["check"]}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -331,5 +390,3 @@ with center:
     st.markdown('<div class="lrp-card">', unsafe_allow_html=True)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.markdown("</div>", unsafe_allow_html=True)
-
-st.caption("Template: bullets moved to header-right; graph shows only the selected age-band segment; mountains stay in side margins.")
