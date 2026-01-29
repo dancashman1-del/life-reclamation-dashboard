@@ -5,7 +5,7 @@ import textwrap
 st.set_page_config(page_title="LRP — Health", layout="wide")
 
 # =============================
-# GLOBAL UI SCALE (fits 100% better)
+# GLOBAL UI SCALE
 # =============================
 UI_SCALE = 0.86
 
@@ -13,29 +13,30 @@ def rem(x):
     return f"{x * UI_SCALE}rem"
 
 def md(html: str):
-    """Render HTML safely (prevents accidental code-block / raw HTML showing)."""
     st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
 
 # -----------------------------
-# Soft background mountains (optional, subtle)
+# Simple SVG icons (Diagnosis / Prescription / Engine)
 # -----------------------------
-MOUNTAIN_SVG = """
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420">
-  <path d="M0,320 L180,230 L340,280 L520,205 L700,285 L900,190 L1080,255 L1260,215 L1400,240 L1400,420 L0,420 Z"
-        fill="rgba(0,0,0,0.05)"/>
-  <path d="M0,365 L210,260 L390,335 L610,245 L780,335 L980,240 L1160,305 L1400,265 L1400,420 L0,420 Z"
-        fill="rgba(0,0,0,0.08)"/>
+ICON_DIAG = """
+<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path fill="currentColor" d="M19 3h-3.5a3.5 3.5 0 0 0-7 0H5a2 2 0 0 0-2 2v2h18V5a2 2 0 0 0-2-2Zm-7-1a1.5 1.5 0 0 1 1.5 1.5h-3A1.5 1.5 0 0 1 12 2Z"/>
+  <path fill="currentColor" d="M3 9v10a2 2 0 0 0 2 2h6v-2H5V9H3Zm16 0v10h-6v2h6a2 2 0 0 0 2-2V9h-2Z"/>
+  <path fill="currentColor" d="M11 11h2v7h-2z"/>
+  <path fill="currentColor" d="M8 14h8v2H8z"/>
 </svg>
 """
 
-def svg_uri(svg):
-    return "data:image/svg+xml," + svg.replace("\n", "").replace("#", "%23").replace("<", "%3C").replace(">", "%3E")
-
-MTN_URI = svg_uri(MOUNTAIN_SVG)
+ICON_RX = """
+<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path fill="currentColor" d="M6 3h7a4 4 0 0 1 0 8H9v2h3.2l3.9 5.7-1.7 1.2L10.8 15H9v6H6V3Zm3 2v4h4a2 2 0 0 0 0-4H9Z"/>
+  <path fill="currentColor" d="M16.2 13.3 21 20h-2.5l-3.6-5.1z"/>
+</svg>
+"""
 
 ENGINE_SVG = """
 <svg viewBox="0 0 64 64" aria-hidden="true">
-  <g fill="none" stroke="currentColor" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="currentColor" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M18 22 h24 v20 H18 z"/>
     <path d="M24 22 v-6 h12 v6"/>
     <path d="M18 30 h-6 v8 h6"/>
@@ -45,27 +46,15 @@ ENGINE_SVG = """
 </svg>
 """
 
-# NOTE: TOP SAFE AREA is the key fix here.
-# Streamlit Cloud's top-right chrome can overlap. This padding prevents clipping.
+# -----------------------------
+# CSS
+# -----------------------------
 md(f"""
 <style>
-/* Safe top gutter so nothing clips under Streamlit Cloud chrome */
+/* BIG safe top gutter — fixes clipping under Streamlit Cloud chrome */
 .block-container {{
-  padding-top: {rem(1.55)};
+  padding-top: {rem(2.35)};
   padding-bottom: {rem(0.9)};
-}}
-
-.lrp-bg {{
-  position: fixed;
-  bottom: -10vh;
-  left: 0;
-  right: 0;
-  height: 42vh;
-  background: url("{MTN_URI}") repeat-x;
-  background-size: 82% auto;
-  opacity: 0.85;
-  z-index: 0;
-  pointer-events: none;
 }}
 
 .lrp-layer {{
@@ -135,11 +124,19 @@ md(f"""
 }}
 
 .label {{
+  display:flex;
+  align-items:center;
+  gap: 10px;
   font-size: {rem(0.78)};
   text-transform: uppercase;
   color: rgba(0,0,0,0.55);
   letter-spacing: 0.4px;
   margin-bottom: {rem(0.35)};
+}}
+.label .ico {{
+  width: {rem(1.15)};
+  height: {rem(1.15)};
+  color: rgba(0,0,0,0.45);
 }}
 
 .body {{
@@ -148,24 +145,50 @@ md(f"""
   line-height: 1.45em;
 }}
 
-.engine {{
-  width: {rem(3.7)};
-  height: {rem(2.9)};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  border: 1px solid rgba(0,0,0,0.14);
-  background: rgba(0,0,0,0.02);
-  color: rgba(0,150,80,0.95);
-  padding: {rem(0.18)};
+.engine-wrap {{
+  margin-top: {rem(0.15)};
+  display:flex;
+  align-items:center;
+  gap: {rem(0.5)};
 }}
-.engine svg {{
-  width: 98%;
-  height: 98%;
+.engine-big {{
+  width: {rem(3.3)};
+  height: {rem(3.0)};
+  color: rgba(0,150,80,0.95);
+}}
+.engine-big svg {{
+  width: 100%;
+  height: 100%;
 }}
 
-/* Make Streamlit buttons look more "slide-native" */
+/* Nav strip (feels like a slider) */
+.nav-strip {{
+  display:flex;
+  flex-direction:column;
+  gap: {rem(0.5)};
+}}
+.nav-center {{
+  text-align:center;
+  font-weight: 850;
+  font-size: {rem(0.95)};
+  color: rgba(0,0,0,0.70);
+}}
+.dots {{
+  display:flex;
+  justify-content:center;
+  gap: {rem(0.35)};
+}}
+.dot {{
+  width: {rem(0.5)};
+  height: {rem(0.5)};
+  border-radius: 999px;
+  background: rgba(0,0,0,0.16);
+}}
+.dot.on {{
+  background: rgba(220,0,0,0.75);
+}}
+
+/* Streamlit buttons: more slide-native */
 div.stButton > button {{
   border-radius: 12px;
   padding: 0.55rem 0.85rem;
@@ -173,7 +196,6 @@ div.stButton > button {{
 }}
 </style>
 
-<div class="lrp-bg"></div>
 <div class="lrp-layer">
 """)
 
@@ -183,13 +205,14 @@ div.stButton > button {{
 BANDS = [
     (0, 5, "Health is assumed and unexamined."),
     (5, 10, "Activity is natural and effortless."),
+    # we'll add more bands later — this nav scales automatically
 ]
 
 if "idx" not in st.session_state:
     st.session_state.idx = 0
 
 def health_value(age: float) -> float:
-    # Keep your curve
+    # keep your curve
     if age <= 10:
         return 92.0
     if age <= 55:
@@ -203,9 +226,9 @@ def health_value(age: float) -> float:
 a0, a1, band_title = BANDS[st.session_state.idx]
 
 # -----------------------------
-# TOP ROW: Title | Buttons | Bullets
+# TOP ROW: Title | Nav | Bullets
 # -----------------------------
-col_title, col_nav, col_bul = st.columns([1.45, 0.75, 1.70], gap="large")
+col_title, col_nav, col_bul = st.columns([1.45, 0.85, 1.70], gap="large")
 
 with col_title:
     md(f"""
@@ -222,19 +245,28 @@ with col_title:
 """)
 
 with col_nav:
-    # Only the buttons (no track, no helper text)
+    # Buttons
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("◀", disabled=(st.session_state.idx == 0), use_container_width=True):
+        if st.button("◀ Previous", disabled=(st.session_state.idx == 0), use_container_width=True):
             st.session_state.idx -= 1
             st.rerun()
     with b2:
-        if st.button("▶", disabled=(st.session_state.idx == len(BANDS) - 1), use_container_width=True):
+        if st.button("Next ▶", disabled=(st.session_state.idx == len(BANDS) - 1), use_container_width=True):
             st.session_state.idx += 1
             st.rerun()
 
-    # Small label so user knows where they are (optional but helpful)
-    st.caption(f"Ages {a0}–{a1}")
+    # Center label + dots (the "slider feel")
+    dots_html = "".join(
+        f'<div class="dot {"on" if i == st.session_state.idx else ""}"></div>'
+        for i in range(len(BANDS))
+    )
+    md(f"""
+<div class="nav-strip">
+  <div class="nav-center">Ages {a0}–{a1}</div>
+  <div class="dots">{dots_html}</div>
+</div>
+""")
 
 with col_bul:
     md(f"""
@@ -252,25 +284,17 @@ with col_bul:
 st.write("")
 
 # -----------------------------
-# PLOT
+# PLOT — "SURPRISE": show ONLY selected band (no grey future line)
 # -----------------------------
-ages_context = list(range(0, 78))
-y_context = [health_value(a) for a in ages_context]
-
 seg_x = list(range(a0, a1 + 1))
 seg_y = [health_value(a) for a in seg_x]
 
 fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=ages_context, y=y_context,
-    mode="lines",
-    line=dict(color="rgba(0,0,0,0.25)", width=2.6, shape="spline"),
-    hoverinfo="skip"
-))
+
 fig.add_trace(go.Scatter(
     x=seg_x, y=seg_y,
     mode="lines",
-    line=dict(color="red", width=7.5, shape="spline"),
+    line=dict(color="red", width=8, shape="spline"),
     hoverinfo="skip"
 ))
 
@@ -278,7 +302,7 @@ tickvals = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,77,80,85,90,92]
 ticktext = [f"<b>{v}</b>" if v in (77, 92) else str(v) for v in tickvals]
 
 fig.update_layout(
-    height=int(500 * UI_SCALE),
+    height=int(520 * UI_SCALE),
     margin=dict(l=30, r=20, t=8, b=30),
     plot_bgcolor="white",
     paper_bgcolor="white",
@@ -290,6 +314,10 @@ fig.update_layout(
         ticktext=ticktext,
         gridcolor="rgba(0,0,0,0.06)",
         zeroline=False,
+        showline=True,            # axis line
+        linecolor="rgba(0,0,0,0.18)",
+        linewidth=1,
+        mirror=False
     ),
     yaxis=dict(
         range=[0, 100],
@@ -297,6 +325,10 @@ fig.update_layout(
         ticktext=["Fit", "Functional", "Frail"],
         gridcolor="rgba(0,0,0,0.06)",
         zeroline=False,
+        showline=True,            # axis line
+        linecolor="rgba(0,0,0,0.18)",
+        linewidth=1,
+        mirror=False
     ),
     showlegend=False
 )
@@ -309,17 +341,19 @@ l, r = st.columns([1.10, 2.90], gap="large")
 with l:
     md(f"""
 <div class="lrp-card">
-  <div class="label">Diagnosis</div>
+  <div class="label"><span class="ico">{ICON_DIAG}</span> Diagnosis</div>
   <div class="body">Everything looks normal and on track for age.</div>
 
-  <div class="label" style="margin-top:{rem(0.75)};">Prescription</div>
+  <div class="label" style="margin-top:{rem(0.75)};"><span class="ico">{ICON_RX}</span> Prescription</div>
   <div class="body">
     Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed.
     Kids are resilient — there’s nothing to worry about.
   </div>
 
   <div class="label" style="margin-top:{rem(0.85)};">Check Engine</div>
-  <div class="engine" title="Engine status (green)">{ENGINE_SVG}</div>
+  <div class="engine-wrap">
+    <div class="engine-big" title="Engine status (green)">{ENGINE_SVG}</div>
+  </div>
 </div>
 """)
 
