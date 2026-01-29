@@ -43,13 +43,18 @@ ENGINE_SVG = """
 </svg>
 """
 
+ENGINE_COLORS = {
+    "green": "rgba(0,150,80,0.95)",
+    "yellow": "rgba(210,150,0,0.95)",
+    "red": "rgba(210,40,40,0.95)",
+}
+
 # -----------------------------
 # CSS
 # -----------------------------
 md(f"""
 <style>
 .block-container {{
-  /* big safe top gutter for Streamlit Cloud chrome */
   padding-top: {rem(2.35)};
   padding-bottom: {rem(0.9)};
 }}
@@ -120,7 +125,6 @@ md(f"""
   line-height: 1.35em;
 }}
 
-/* NAV STRIP */
 .nav-strip {{
   display:flex;
   flex-direction:column;
@@ -129,7 +133,7 @@ md(f"""
 .nav-center {{
   text-align:center;
   font-weight: 950;
-  font-size: {rem(1.35)};  /* make Ages label big like the former header */
+  font-size: {rem(1.35)};
   color: rgba(0,0,0,0.78);
 }}
 .dots {{
@@ -147,7 +151,6 @@ md(f"""
   background: rgba(220,0,0,0.75);
 }}
 
-/* Left panel labels: bold + icons larger */
 .label {{
   display:flex;
   align-items:center;
@@ -157,7 +160,7 @@ md(f"""
   color: rgba(0,0,0,0.55);
   letter-spacing: 0.4px;
   margin-bottom: {rem(0.35)};
-  font-weight: 900; /* BOLD */
+  font-weight: 900;
 }}
 .label .ico {{
   width: {rem(1.45)};
@@ -178,9 +181,8 @@ md(f"""
   gap: {rem(0.5)};
 }}
 .engine-big {{
-  width: {rem(3.7)};   /* bigger engine itself */
+  width: {rem(3.7)};
   height: {rem(3.4)};
-  color: rgba(0,150,80,0.95);
 }}
 .engine-big svg {{
   width: 100%;
@@ -198,17 +200,10 @@ div.stButton > button {{
 """)
 
 # -----------------------------
-# DATA
+# HEALTH CURVE (SAL)
 # -----------------------------
-BANDS = [
-    (0, 5, "Health is assumed and unexamined."),
-    (5, 10, "Activity is natural and effortless."),
-    # add more later
-]
-if "idx" not in st.session_state:
-    st.session_state.idx = 0
-
-def health_value(age: float) -> float:
+def health_value_sal(age: float) -> float:
+    # your established SAL curve
     if age <= 10:
         return 92.0
     if age <= 55:
@@ -219,7 +214,70 @@ def health_value(age: float) -> float:
         return 35.0 - 20.0 * (t ** 1.2)
     return None
 
-a0, a1, band_title = BANDS[st.session_state.idx]
+# -----------------------------
+# SLIDES DATA (SAL)
+# Add/replace TODO text as you paste in the locked content.
+# -----------------------------
+SLIDES = [
+    {
+        "band": (0, 5),
+        "bullets_title": "Health is assumed and unexamined.",
+        "bullets": [
+            "Unstructured play, exploration, bonding",
+            "Sleep mostly protected",
+            "Daycare illness disrupts rhythm",
+            "Screens introduced occasionally",
+        ],
+        "diagnosis": "Everything looks normal and on track for age.",
+        "prescription": "Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed. Kids are resilient — there’s nothing to worry about.",
+        "engine": "green",
+    },
+    {
+        "band": (5, 10),
+        "bullets_title": "Activity is natural and effortless.",
+        "bullets": [
+            "Unstructured play, exploration, bonding",
+            "Sleep mostly protected",
+            "Daycare illness disrupts rhythm",
+            "Screens introduced occasionally",
+        ],
+        "diagnosis": "Healthy growth and development within expected ranges.",
+        "prescription": "Keep doing what you’re doing. Encourage activity, limit treats when you can, and address issues as they come up.",
+        "engine": "green",
+    },
+]
+
+# Generate placeholder bands out to 75–77 so navigation is complete now
+# (Replace each placeholder later with your real text.)
+PLACEHOLDER_BANDS = [
+    (10, 15), (15, 20), (20, 25), (25, 30), (30, 35),
+    (35, 40), (40, 45), (45, 50), (50, 55), (55, 60),
+    (60, 65), (65, 70), (70, 75), (75, 77)
+]
+for b0, b1 in PLACEHOLDER_BANDS:
+    SLIDES.append({
+        "band": (b0, b1),
+        "bullets_title": "TODO — paste locked-in heading",
+        "bullets": [
+            "TODO bullet 1",
+            "TODO bullet 2",
+            "TODO bullet 3",
+            "TODO bullet 4",
+        ],
+        "diagnosis": "TODO — paste diagnosis",
+        "prescription": "TODO — paste prescription",
+        "engine": "yellow" if b0 >= 50 else "green",
+    })
+
+# -----------------------------
+# NAV STATE
+# -----------------------------
+if "idx" not in st.session_state:
+    st.session_state.idx = 0
+st.session_state.idx = max(0, min(st.session_state.idx, len(SLIDES) - 1))
+
+current = SLIDES[st.session_state.idx]
+a0, a1 = current["band"]
 
 # -----------------------------
 # TOP ROW: Title | Nav | Bullets
@@ -248,13 +306,13 @@ with col_nav:
             st.session_state.idx -= 1
             st.rerun()
     with b2:
-        if st.button("Next ▶", disabled=(st.session_state.idx == len(BANDS) - 1), use_container_width=True):
+        if st.button("Next ▶", disabled=(st.session_state.idx == len(SLIDES) - 1), use_container_width=True):
             st.session_state.idx += 1
             st.rerun()
 
     dots_html = "".join(
         f'<div class="dot {"on" if i == st.session_state.idx else ""}"></div>'
-        for i in range(len(BANDS))
+        for i in range(len(SLIDES))
     )
     md(f"""
 <div class="nav-strip">
@@ -264,14 +322,12 @@ with col_nav:
 """)
 
 with col_bul:
+    bullets_html = "".join(f"<div>• {b}</div>" for b in current["bullets"])
     md(f"""
 <div class="lrp-card">
-  <div class="bullets-title">{band_title}</div>
+  <div class="bullets-title">{current["bullets_title"]}</div>
   <div class="bullets">
-    <div>• Unstructured play, exploration, bonding</div>
-    <div>• Sleep mostly protected</div>
-    <div>• Daycare illness disrupts rhythm</div>
-    <div>• Screens introduced occasionally</div>
+    {bullets_html}
   </div>
 </div>
 """)
@@ -279,11 +335,11 @@ with col_bul:
 st.write("")
 
 # -----------------------------
-# PLOT — accumulate red from 0 up to current band end
+# PLOT — cumulative red to current band end; no future line
 # -----------------------------
 red_end = a1
 red_x = list(range(0, red_end + 1))
-red_y = [health_value(a) for a in red_x]
+red_y = [health_value_sal(a) for a in red_x]
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
@@ -332,20 +388,18 @@ fig.update_layout(
 l, r = st.columns([1.10, 2.90], gap="large")
 
 with l:
+    eng_color = ENGINE_COLORS.get(current["engine"], ENGINE_COLORS["green"])
     md(f"""
 <div class="lrp-card">
   <div class="label"><span class="ico">{ICON_DIAG}</span> Diagnosis</div>
-  <div class="body">Everything looks normal and on track for age.</div>
+  <div class="body">{current["diagnosis"]}</div>
 
   <div class="label" style="margin-top:{rem(0.75)};"><span class="ico">{ICON_RX}</span> Prescription</div>
-  <div class="body">
-    Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed.
-    Kids are resilient — there’s nothing to worry about.
-  </div>
+  <div class="body">{current["prescription"]}</div>
 
   <div class="label" style="margin-top:{rem(0.85)};">Check Engine</div>
   <div class="engine-wrap">
-    <div class="engine-big" title="Engine status (green)">{ENGINE_SVG}</div>
+    <div class="engine-big" style="color:{eng_color};" title="Engine status">{ENGINE_SVG}</div>
   </div>
 </div>
 """)
@@ -355,4 +409,4 @@ with r:
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     md("</div>")
 
-md("</div>")
+md("</div>")  # close lrp-layer
