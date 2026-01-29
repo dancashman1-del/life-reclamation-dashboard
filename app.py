@@ -4,9 +4,6 @@ import textwrap
 
 st.set_page_config(page_title="LRP — Health", layout="wide")
 
-# =============================
-# GLOBAL UI SCALE
-# =============================
 UI_SCALE = 0.86
 
 def rem(x):
@@ -16,7 +13,7 @@ def md(html: str):
     st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
 
 # -----------------------------
-# Simple SVG icons (Diagnosis / Prescription / Engine)
+# Icons
 # -----------------------------
 ICON_DIAG = """
 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -51,8 +48,8 @@ ENGINE_SVG = """
 # -----------------------------
 md(f"""
 <style>
-/* BIG safe top gutter — fixes clipping under Streamlit Cloud chrome */
 .block-container {{
+  /* big safe top gutter for Streamlit Cloud chrome */
   padding-top: {rem(2.35)};
   padding-bottom: {rem(0.9)};
 }}
@@ -71,7 +68,7 @@ md(f"""
 }}
 
 .lrp-title {{
-  font-size: {rem(1.48)};
+  font-size: {rem(1.42)};
   font-weight: 900;
   margin: 0 0 {rem(0.35)} 0;
 }}
@@ -123,55 +120,17 @@ md(f"""
   line-height: 1.35em;
 }}
 
-.label {{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  font-size: {rem(0.78)};
-  text-transform: uppercase;
-  color: rgba(0,0,0,0.55);
-  letter-spacing: 0.4px;
-  margin-bottom: {rem(0.35)};
-}}
-.label .ico {{
-  width: {rem(1.15)};
-  height: {rem(1.15)};
-  color: rgba(0,0,0,0.45);
-}}
-
-.body {{
-  font-size: {rem(0.98)};
-  color: rgba(0,0,0,0.78);
-  line-height: 1.45em;
-}}
-
-.engine-wrap {{
-  margin-top: {rem(0.15)};
-  display:flex;
-  align-items:center;
-  gap: {rem(0.5)};
-}}
-.engine-big {{
-  width: {rem(3.3)};
-  height: {rem(3.0)};
-  color: rgba(0,150,80,0.95);
-}}
-.engine-big svg {{
-  width: 100%;
-  height: 100%;
-}}
-
-/* Nav strip (feels like a slider) */
+/* NAV STRIP */
 .nav-strip {{
   display:flex;
   flex-direction:column;
-  gap: {rem(0.5)};
+  gap: {rem(0.35)};
 }}
 .nav-center {{
   text-align:center;
-  font-weight: 850;
-  font-size: {rem(0.95)};
-  color: rgba(0,0,0,0.70);
+  font-weight: 950;
+  font-size: {rem(1.35)};  /* make Ages label big like the former header */
+  color: rgba(0,0,0,0.78);
 }}
 .dots {{
   display:flex;
@@ -188,7 +147,46 @@ md(f"""
   background: rgba(220,0,0,0.75);
 }}
 
-/* Streamlit buttons: more slide-native */
+/* Left panel labels: bold + icons larger */
+.label {{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  font-size: {rem(0.86)};
+  text-transform: uppercase;
+  color: rgba(0,0,0,0.55);
+  letter-spacing: 0.4px;
+  margin-bottom: {rem(0.35)};
+  font-weight: 900; /* BOLD */
+}}
+.label .ico {{
+  width: {rem(1.45)};
+  height: {rem(1.45)};
+  color: rgba(0,0,0,0.45);
+}}
+
+.body {{
+  font-size: {rem(0.98)};
+  color: rgba(0,0,0,0.78);
+  line-height: 1.45em;
+}}
+
+.engine-wrap {{
+  margin-top: {rem(0.15)};
+  display:flex;
+  align-items:center;
+  gap: {rem(0.5)};
+}}
+.engine-big {{
+  width: {rem(3.7)};   /* bigger engine itself */
+  height: {rem(3.4)};
+  color: rgba(0,150,80,0.95);
+}}
+.engine-big svg {{
+  width: 100%;
+  height: 100%;
+}}
+
 div.stButton > button {{
   border-radius: 12px;
   padding: 0.55rem 0.85rem;
@@ -205,14 +203,12 @@ div.stButton > button {{
 BANDS = [
     (0, 5, "Health is assumed and unexamined."),
     (5, 10, "Activity is natural and effortless."),
-    # we'll add more bands later — this nav scales automatically
+    # add more later
 ]
-
 if "idx" not in st.session_state:
     st.session_state.idx = 0
 
 def health_value(age: float) -> float:
-    # keep your curve
     if age <= 10:
         return 92.0
     if age <= 55:
@@ -233,7 +229,8 @@ col_title, col_nav, col_bul = st.columns([1.45, 0.85, 1.70], gap="large")
 with col_title:
     md(f"""
 <div class="lrp-card">
-  <div class="lrp-title">HEALTH · SAL · Ages {a0}–{a1}</div>
+  <div class="lrp-title">HEALTH · STANDARD AMERICAN LIFE</div>
+
   <div class="dict-line">
     <div class="dict-head">health</div>
     <div class="dict-meta">• noun</div>
@@ -245,7 +242,6 @@ with col_title:
 """)
 
 with col_nav:
-    # Buttons
     b1, b2 = st.columns(2)
     with b1:
         if st.button("◀ Previous", disabled=(st.session_state.idx == 0), use_container_width=True):
@@ -256,7 +252,6 @@ with col_nav:
             st.session_state.idx += 1
             st.rerun()
 
-    # Center label + dots (the "slider feel")
     dots_html = "".join(
         f'<div class="dot {"on" if i == st.session_state.idx else ""}"></div>'
         for i in range(len(BANDS))
@@ -284,15 +279,15 @@ with col_bul:
 st.write("")
 
 # -----------------------------
-# PLOT — "SURPRISE": show ONLY selected band (no grey future line)
+# PLOT — accumulate red from 0 up to current band end
 # -----------------------------
-seg_x = list(range(a0, a1 + 1))
-seg_y = [health_value(a) for a in seg_x]
+red_end = a1
+red_x = list(range(0, red_end + 1))
+red_y = [health_value(a) for a in red_x]
 
 fig = go.Figure()
-
 fig.add_trace(go.Scatter(
-    x=seg_x, y=seg_y,
+    x=red_x, y=red_y,
     mode="lines",
     line=dict(color="red", width=8, shape="spline"),
     hoverinfo="skip"
@@ -314,10 +309,9 @@ fig.update_layout(
         ticktext=ticktext,
         gridcolor="rgba(0,0,0,0.06)",
         zeroline=False,
-        showline=True,            # axis line
+        showline=True,
         linecolor="rgba(0,0,0,0.18)",
         linewidth=1,
-        mirror=False
     ),
     yaxis=dict(
         range=[0, 100],
@@ -325,10 +319,9 @@ fig.update_layout(
         ticktext=["Fit", "Functional", "Frail"],
         gridcolor="rgba(0,0,0,0.06)",
         zeroline=False,
-        showline=True,            # axis line
+        showline=True,
         linecolor="rgba(0,0,0,0.18)",
         linewidth=1,
-        mirror=False
     ),
     showlegend=False
 )
@@ -362,4 +355,4 @@ with r:
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     md("</div>")
 
-md("</div>")  # close lrp-layer
+md("</div>")
