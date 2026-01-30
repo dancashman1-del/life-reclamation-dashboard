@@ -1,412 +1,618 @@
 import streamlit as st
 import plotly.graph_objects as go
-import textwrap
 
-st.set_page_config(page_title="LRP — Health", layout="wide")
+# =========================
+# AUTHORITATIVE TEXT SOURCE
+# =========================
+# Populated from: "Life Reclamation Project Health text for SAL and LRP Slides.docx"
+# (Dan confirmed these docs are authoritative.)
+BANDS = [{'a0': 0,
+  'a1': 5,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Health is assumed and unexamined.',
+  'bullets': ['Lots of unstructured play, exploration, and bonding with parents',
+              'Sleep is mostly protected; routines feel supportive and calming',
+              'Daycare schedules, frequent illness, and hand-offs begin to disrupt rhythm',
+              'Screens are introduced occasionally to soothe, distract, or buy quiet'],
+  'diagnosis': 'Everything looks normal and on track for age.',
+  'prescription': 'Stay on schedule with the ~25 to 35 vaccinations. Use antibiotics and fever reducers when needed. Kids are resilient — there’s nothing to worry about.',
+  'engine': 'green'},
+ {'a0': 5,
+  'a1': 10,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Activity is natural and effortless.',
+  'bullets': ['Real play with friends is still common; movement happens naturally and joyfully',
+              'A first sport or activity is introduced — with fruit snacks and juice boxes as the reward',
+              'Screens and online entertainment increasingly fill “in-between” time',
+              'Busy schedules lead to quicker meals and less intentional nutrition'],
+  'diagnosis': 'Healthy growth and development within expected ranges.',
+  'prescription': 'Keep doing what you’re doing. Encourage activity, limit treats when you can, and address issues as they come up.',
+  'engine': 'green'},
+ {'a0': 10,
+  'a1': 15,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Structure increases, resilience masks cost.',
+  'bullets': ['Organized sports and activities increase, but free play declines',
+              'Screens, games, and phones begin to dominate downtime and social life',
+              'Sleep duration and quality erodes due to early schedules and late-night stimulation',
+              'Food choices tilt increasingly toward convenience and peer-influenced habits'],
+  'diagnosis': 'Typical adolescent changes; fatigue, mood swings, and irregular sleep are common.',
+  'prescription': 'Try to get enough sleep, eat reasonably well, and stay active when schedules allow. This phase usually passes.',
+  'engine': 'green'},
+ {'a0': 15,
+  'a1': 20,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Activity stays high as recovery slips.',
+  'bullets': ['Fitness takes a back seat, with perhaps one school sport remaining as the last truly demanding activity',
+              'Sleep erodes further due to school demands, increased screen time, and social schedules',
+              'Caffeine, sugar, and ultra-processed foods are used to manage energy and stress',
+              'Strength training, cardio, and recovery, that were never foundational, slip even further away'],
+  'diagnosis': 'Occasional bouts of anxiety, low mood, and emotional volatility are considered normal at this age. Plus weight gain.',
+  'prescription': 'Try reducing screen time, get some fresh air, and manage stress. Revisit if problems persist or worsen.',
+  'engine': 'yellow'},
+ {'a0': 20,
+  'a1': 25,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Movement is quietly replaced.',
+  'bullets': ['Physical activity declines sharply as college and early career demands dominate daily life',
+              'Long hours seated at a laptop replace movement, with posture and mobility beginning to suffer',
+              'Sleep irregularities worsen due to deadlines, online social demands, and screen exposure',
+              'Convenience foods, caffeine, and snacks are used to sustain focus and productivity while alcohol is used to unwind and decompress'],
+  'diagnosis': 'Young and generally healthy despite irregular routines.',
+  'prescription': 'Focus on stress management. Eat right when you can, stay active when possible, and don’t worry too much — you’re young!',
+  'engine': 'yellow'},
+ {'a0': 25,
+  'a1': 30,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Health competes with productivity.',
+  'bullets': ['Fitness becomes sporadic, squeezed in only when time and energy allow',
+              'Long hours sitting at work carry over into evenings and weekends',
+              'Along with weight gain, minor aches and stiffness appear, but are dismissed as temporary or stress-related',
+              'Sleep and nutrition are traded for productivity, convenience, social life, and more routine alcohol use'],
+  'diagnosis': 'Lifestyle strain and weight gain is noted, but nothing is outside normal expectations.',
+  'prescription': 'Try to eat better, exercise more, and get more sleep. Small changes add up.',
+  'engine': 'yellow'},
+ {'a0': 30,
+  'a1': 35,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': '“I’ll get back to it later.”',
+  'bullets': ['Career and family demands make any attempt at consistent training feel nearly impossible',
+              'Sitting, stress, and mental load dominate most days',
+              'Weight gain, stiffness, and recurring pain accelerates',
+              'Health is managed reactively, with plans to “get back on track” later'],
+  'diagnosis': 'Weight gain, fatigue, and aches are typical at this stage of life.',
+  'prescription': 'Work on balance. Lose a little weight if you can, be more active when time allows.',
+  'engine': 'yellow'},
+ {'a0': 35,
+  'a1': 40,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Stress and decline feel ordinary.',
+  'bullets': ['Work and family responsibilities and distractions consume most discretionary time',
+              'Chronic stress, decreased productivity and long hours accumulate',
+              'Lingering pain and fatigue is ever present',
+              'Health is discussed more than acted upon'],
+  'diagnosis': 'Cumulative stress effects are apparent, though labs remain acceptable.',
+  'prescription': 'Continue monitoring. Lifestyle changes may help if symptoms worsen.',
+  'engine': 'yellow'},
+ {'a0': 40,
+  'a1': 45,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Warning lights flicker.',
+  'bullets': ['Energy and resilience decline is becoming pronounced',
+              'Blood pressure, cholesterol, and weight creep ever upward',
+              'Exercise remains aspirational, never habitual',
+              'Health is outsourced to annual checkups, and red flag deferrals'],
+  'diagnosis': 'Risk factors are emerging, but consistent with “normal aging.”',
+  'prescription': 'Watch the numbers. Eat right, exercise more, and we’ll recheck next year.',
+  'engine': 'yellow'},
+ {'a0': 45,
+  'a1': 50,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Prevention gives way to control.',
+  'bullets': ['Health concerns feel more personal as peers face diagnoses',
+              'Medications or guidance are introduced',
+              'Physical activity is cautiously introduced but dropped',
+              'Capacity continues to decline'],
+  'diagnosis': 'Blood pressure, cholesterol, or weight are trending upward.',
+  'prescription': 'Try diet and exercise first. If trends continue, medication can help.',
+  'engine': 'orange'},
+ {'a0': 50,
+  'a1': 55,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Comfort replaces capability.',
+  'bullets': ['Daily routines adjust to avoid discomfort',
+              'Strength, balance, and power have diminished greatly',
+              'Travel and hobbies are chosen with limits in mind',
+              'Health decisions prioritize symptom control'],
+  'diagnosis': 'Age-related functional decline is within expected limits.',
+  'prescription': 'Adjust activities to what you can do. Avoid overdoing it.',
+  'engine': 'orange'},
+ {'a0': 55,
+  'a1': 60,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Decline steepens.',
+  'bullets': ['Strength and stamina drop faster than expected',
+              'Pain and chronic conditions shape daily choices',
+              'Exercise becomes “therapy,” not growth',
+              'Independence remains, but health is fading, shrinking'],
+  'diagnosis': 'Early chronic conditions such as prediabetes or hypertension are identified.',
+  'prescription': 'Begin standard medical therapy. Focus on compliance and monitoring.',
+  'engine': 'red'},
+ {'a0': 60,
+  'a1': 65,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Effort carries a cost.',
+  'bullets': ['Independence persists, but effort requires planning',
+              'Strength and aerobic capacity have eroded',
+              'Medications are routine',
+              'Activities are chosen to minimize falls and fractures'],
+  'diagnosis': 'We are doing what we can. Multiple risk factors have pharmaceutical answers.',
+  'prescription': 'Prioritize safety and consistency.',
+  'engine': 'red'},
+ {'a0': 65,
+  'a1': 70,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Confidence fades.',
+  'bullets': ['Physical confidence declines',
+              'Recovery becomes unreliable',
+              'Medications expand',
+              'Daily choices prioritize safety'],
+  'diagnosis': 'Declined strength is attributed to normal aging.',
+  'prescription': 'Simplify routines. Avoid injury.',
+  'engine': 'red'},
+ {'a0': 70,
+  'a1': 75,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Risk becomes central.',
+  'bullets': ['Restricting daily activities, outings, or hobbies around limited energy levels',
+              'Independence relies on complex, daily medication management with side effects',
+              'Bone density is greatly reduced while minor scrapes or bruises take longer to heal',
+              'Recovery from illness or injury requires a longer-term rest or physical therapy'],
+  'diagnosis': 'Falls and slower recovery are expected at this age.',
+  'prescription': 'Use assistive devices. Modify living space.',
+  'engine': 'red'},
+ {'a0': 75,
+  'a1': 77,
+  'slide_title': 'HEALTH · STANDARD AMERICAN LIFE',
+  'word': 'health',
+  'pos': 'noun',
+  'phon': '/helTH/',
+  'def1': 'the absence of disease or infirmity',
+  'def2': 'also: the capacity to live, move, and engage fully with life',
+  'heading': 'Decline ends abruptly.',
+  'bullets': ['Multiple health conditions (heart disease, diabetes, dementia) are likely to coexist and interact, complicating treatment and recovery',
+              'Rapid reduction in strength, walking speed, and overall energy levels makes daily activities extremely hard',
+              'The failing immune system turns minor illness into life threatening pneumonia or sepsis',
+              'A prolonged homebound or nursing-home physical decline ends in Death'],
+  'diagnosis': 'Serious illness or injury is common.',
+  'prescription': 'Hospitalization, rehab, or hospice. Focus on comfort.',
+  'engine': 'red'}]
 
-UI_SCALE = 0.86
+# -------------------------
+# App config
+# -------------------------
+st.set_page_config(page_title="LRP • Health (SAL)", layout="wide")
 
-def rem(x):
-    return f"{x * UI_SCALE}rem"
-
-def md(html: str):
-    st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
-
-# -----------------------------
-# Icons
-# -----------------------------
-ICON_DIAG = """
-<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path fill="currentColor" d="M19 3h-3.5a3.5 3.5 0 0 0-7 0H5a2 2 0 0 0-2 2v2h18V5a2 2 0 0 0-2-2Zm-7-1a1.5 1.5 0 0 1 1.5 1.5h-3A1.5 1.5 0 0 1 12 2Z"/>
-  <path fill="currentColor" d="M3 9v10a2 2 0 0 0 2 2h6v-2H5V9H3Zm16 0v10h-6v2h6a2 2 0 0 0 2-2V9h-2Z"/>
-  <path fill="currentColor" d="M11 11h2v7h-2z"/>
-  <path fill="currentColor" d="M8 14h8v2H8z"/>
-</svg>
-"""
-
-ICON_RX = """
-<svg viewBox="0 0 24 24" aria-hidden="true">
-  <path fill="currentColor" d="M6 3h7a4 4 0 0 1 0 8H9v2h3.2l3.9 5.7-1.7 1.2L10.8 15H9v6H6V3Zm3 2v4h4a2 2 0 0 0 0-4H9Z"/>
-  <path fill="currentColor" d="M16.2 13.3 21 20h-2.5l-3.6-5.1z"/>
-</svg>
-"""
-
-ENGINE_SVG = """
-<svg viewBox="0 0 64 64" aria-hidden="true">
-  <g fill="none" stroke="currentColor" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M18 22 h24 v20 H18 z"/>
-    <path d="M24 22 v-6 h12 v6"/>
-    <path d="M18 30 h-6 v8 h6"/>
-    <path d="M42 30 h10 v8 H42"/>
-    <path d="M22 42 h16"/>
-  </g>
-</svg>
-"""
-
-ENGINE_COLORS = {
-    "green": "rgba(0,150,80,0.95)",
-    "yellow": "rgba(210,150,0,0.95)",
-    "red": "rgba(210,40,40,0.95)",
-}
-
-# -----------------------------
-# CSS
-# -----------------------------
-md(f"""
+# -------------------------
+# Minimal CSS (aims to fit at 100% zoom as well as possible)
+# -------------------------
+st.markdown(
+    """
 <style>
-.block-container {{
-  padding-top: {rem(2.35)};
-  padding-bottom: {rem(0.9)};
-}}
+/* Give enough top padding so nothing clips */
+.block-container { padding-top: 1.7rem; padding-bottom: 1.2rem; max-width: 1500px; }
 
-.lrp-layer {{
-  position: relative;
-  z-index: 1;
-}}
-
-.lrp-card {{
+/* Cards */
+.lrp-card {
   background: rgba(255,255,255,0.96);
   border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 16px;
-  padding: {rem(0.85)};
-  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-}}
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  padding: 18px 18px 16px 18px;
+}
 
-.lrp-title {{
-  font-size: {rem(1.42)};
-  font-weight: 900;
-  margin: 0 0 {rem(0.35)} 0;
-}}
-
-.dict-line {{
-  display:flex;
-  align-items:baseline;
-  gap: 10px;
-  margin-top: 2px;
-}}
-.dict-head {{
-  font-size: {rem(1.18)};
-  font-weight: 900;
-}}
-.dict-meta {{
-  font-size: {rem(0.88)};
-  color: rgba(0,0,0,0.50);
-  font-weight: 650;
-}}
-.dict-pron {{
-  font-style: italic;
-  color: rgba(0,0,0,0.62);
-  margin-top: 4px;
-}}
-.dict-def {{
-  display: grid;
-  grid-template-columns: 22px 1fr;
-  column-gap: 10px;
-  margin-top: 6px;
-  font-size: {rem(0.98)};
-  color: rgba(0,0,0,0.76);
-}}
-.dict-num {{
-  color: rgba(0,0,0,0.48);
+.lrp-title {
   font-weight: 800;
-}}
+  letter-spacing: 0.5px;
+  font-size: 26px;
+  margin-bottom: 10px;
+}
 
-.bullets-title {{
+.lrp-dictword {
+  font-size: 22px;
+  font-weight: 800;
+  margin-top: 6px;
+}
+.lrp-pos {
+  font-size: 14px;
+  color: rgba(0,0,0,0.55);
+  font-weight: 600;
+  margin-left: 8px;
+}
+.lrp-phon {
+  font-size: 18px;
+  color: rgba(0,0,0,0.50);
+  margin-top: 6px;
+  font-style: italic;
+}
+.lrp-def {
+  font-size: 16px;
+  margin-top: 10px;
+  line-height: 1.35;
+}
+.lrp-defnum {
+  color: rgba(0,0,0,0.55);
+  font-weight: 800;
+  display: inline-block;
+  width: 26px;
+}
+
+.lrp-heading {
+  font-size: 20px;
   font-weight: 900;
-  font-size: {rem(1.02)};
-  margin-bottom: {rem(0.55)};
-}}
-.bullets {{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: {rem(0.35)} {rem(0.95)};
-  font-size: {rem(0.94)};
-  color: rgba(0,0,0,0.78);
-  line-height: 1.35em;
-}}
+  margin: 0 0 10px 0;
+}
 
-.nav-strip {{
+.lrp-bullets {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.lrp-bullets ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.lrp-bullets li {
+  margin: 6px 0;
+}
+
+/* Left diagnosis card */
+.lrp-label {
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  font-size: 12px;
+  color: rgba(0,0,0,0.55);
+  margin-top: 6px;
+  text-transform: uppercase;
   display:flex;
-  flex-direction:column;
-  gap: {rem(0.35)};
-}}
-.nav-center {{
+  align-items:center;
+  gap:10px;
+}
+.lrp-body {
+  font-size: 15px;
+  line-height: 1.45;
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+/* Icons */
+.lrp-ico {
+  font-size: 26px;
+  width: 30px;
+  text-align: center;
+}
+.engine-svg {
+  width: 64px;
+  height: 64px;
+}
+
+/* Navigation */
+.ages-label {
+  font-size: 22px;
+  font-weight: 900;
   text-align:center;
-  font-weight: 950;
-  font-size: {rem(1.35)};
-  color: rgba(0,0,0,0.78);
-}}
-.dots {{
+  margin-top: 10px;
+}
+.dots {
   display:flex;
   justify-content:center;
-  gap: {rem(0.35)};
-}}
-.dot {{
-  width: {rem(0.5)};
-  height: {rem(0.5)};
-  border-radius: 999px;
-  background: rgba(0,0,0,0.16);
-}}
-.dot.on {{
-  background: rgba(220,0,0,0.75);
-}}
+  gap: 6px;
+  margin-top: 8px;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.18);
+}
+.dot.active {
+  background: #d11a1a;
+}
 
-.label {{
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  font-size: {rem(0.86)};
-  text-transform: uppercase;
-  color: rgba(0,0,0,0.55);
-  letter-spacing: 0.4px;
-  margin-bottom: {rem(0.35)};
-  font-weight: 900;
-}}
-.label .ico {{
-  width: {rem(1.45)};
-  height: {rem(1.45)};
-  color: rgba(0,0,0,0.45);
-}}
-
-.body {{
-  font-size: {rem(0.98)};
-  color: rgba(0,0,0,0.78);
-  line-height: 1.45em;
-}}
-
-.engine-wrap {{
-  margin-top: {rem(0.15)};
-  display:flex;
-  align-items:center;
-  gap: {rem(0.5)};
-}}
-.engine-big {{
-  width: {rem(3.7)};
-  height: {rem(3.4)};
-}}
-.engine-big svg {{
-  width: 100%;
-  height: 100%;
-}}
-
-div.stButton > button {{
-  border-radius: 12px;
-  padding: 0.55rem 0.85rem;
-  font-weight: 650;
-}}
+/* Plot container tweak */
+.plot-card {
+  padding: 10px 14px 6px 14px;
+}
 </style>
+""",
+    unsafe_allow_html=True,
+)
 
-<div class="lrp-layer">
-""")
-
-# -----------------------------
-# HEALTH CURVE (SAL)
-# -----------------------------
-def health_value_sal(age: float) -> float:
-    # your established SAL curve
-    if age <= 10:
-        return 92.0
-    if age <= 55:
-        t = (age - 10) / 45
-        return 92.0 - 57.0 * (t ** 1.35)
-    if age <= 77:
-        t = (age - 55) / 22
-        return 35.0 - 20.0 * (t ** 1.2)
-    return None
-
-# -----------------------------
-# SLIDES DATA (SAL)
-# Add/replace TODO text as you paste in the locked content.
-# -----------------------------
-SLIDES = [
-    {
-        "band": (0, 5),
-        "bullets_title": "Health is assumed and unexamined.",
-        "bullets": [
-            "Unstructured play, exploration, bonding",
-            "Sleep mostly protected",
-            "Daycare illness disrupts rhythm",
-            "Screens introduced occasionally",
-        ],
-        "diagnosis": "Everything looks normal and on track for age.",
-        "prescription": "Stay on schedule with vaccinations. Use antibiotics and fever reducers when needed. Kids are resilient — there’s nothing to worry about.",
-        "engine": "green",
-    },
-    {
-        "band": (5, 10),
-        "bullets_title": "Activity is natural and effortless.",
-        "bullets": [
-            "Unstructured play, exploration, bonding",
-            "Sleep mostly protected",
-            "Daycare illness disrupts rhythm",
-            "Screens introduced occasionally",
-        ],
-        "diagnosis": "Healthy growth and development within expected ranges.",
-        "prescription": "Keep doing what you’re doing. Encourage activity, limit treats when you can, and address issues as they come up.",
-        "engine": "green",
-    },
-]
-
-# Generate placeholder bands out to 75–77 so navigation is complete now
-# (Replace each placeholder later with your real text.)
-PLACEHOLDER_BANDS = [
-    (10, 15), (15, 20), (20, 25), (25, 30), (30, 35),
-    (35, 40), (40, 45), (45, 50), (50, 55), (55, 60),
-    (60, 65), (65, 70), (70, 75), (75, 77)
-]
-for b0, b1 in PLACEHOLDER_BANDS:
-    SLIDES.append({
-        "band": (b0, b1),
-        "bullets_title": "TODO — paste locked-in heading",
-        "bullets": [
-            "TODO bullet 1",
-            "TODO bullet 2",
-            "TODO bullet 3",
-            "TODO bullet 4",
-        ],
-        "diagnosis": "TODO — paste diagnosis",
-        "prescription": "TODO — paste prescription",
-        "engine": "yellow" if b0 >= 50 else "green",
-    })
-
-# -----------------------------
-# NAV STATE
-# -----------------------------
+# -------------------------
+# Session state
+# -------------------------
 if "idx" not in st.session_state:
     st.session_state.idx = 0
-st.session_state.idx = max(0, min(st.session_state.idx, len(SLIDES) - 1))
 
-current = SLIDES[st.session_state.idx]
-a0, a1 = current["band"]
+# -------------------------
+# Helpers
+# -------------------------
+def clamp(v, lo, hi):
+    return max(lo, min(hi, v))
 
-# -----------------------------
-# TOP ROW: Title | Nav | Bullets
-# -----------------------------
-col_title, col_nav, col_bul = st.columns([1.45, 0.85, 1.70], gap="large")
+def engine_svg(color_key: str) -> str:
+    palette = {
+        "green": "#17a34a",
+        "yellow": "#f59e0b",
+        "orange": "#f97316",
+        "red": "#ef4444",
+    }
+    c = palette.get(color_key, "#17a34a")
+    # Bigger engine, no outer circle
+    return f"""
+<svg class="engine-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="Check engine">
+  <rect x="10" y="20" width="44" height="26" rx="6" fill="{c}" opacity="0.18"/>
+  <path d="M22 22h20c3 0 6 3 6 6v12c0 3-3 6-6 6H22c-3 0-6-3-6-6V28c0-3 3-6 6-6z" fill="{c}"/>
+  <path d="M18 30h-6v10h6" fill="{c}"/>
+  <path d="M52 30h6v10h-6" fill="{c}"/>
+  <rect x="26" y="28" width="12" height="12" rx="2" fill="white" opacity="0.92"/>
+  <path d="M26 18h12v4H26z" fill="{c}"/>
+  <path d="M28 46h8v4h-8z" fill="{c}"/>
+</svg>
+"""
 
-with col_title:
-    md(f"""
-<div class="lrp-card">
-  <div class="lrp-title">HEALTH · STANDARD AMERICAN LIFE</div>
+def dots_html(active_idx: int, n: int) -> str:
+    dots = []
+    for i in range(n):
+        cls = "dot active" if i == active_idx else "dot"
+        dots.append(f'<div class="{cls}"></div>')
+    return '<div class="dots">' + "".join(dots) + "</div>"
 
-  <div class="dict-line">
-    <div class="dict-head">health</div>
-    <div class="dict-meta">• noun</div>
-  </div>
-  <div class="dict-pron">/helTH/</div>
-  <div class="dict-def"><div class="dict-num">1)</div><div>the absence of disease or infirmity</div></div>
-  <div class="dict-def"><div class="dict-num">2)</div><div>also: the capacity to live, move, and engage fully with life</div></div>
-</div>
-""")
+def health_curve_points():
+    # y-scale: Fit ~3, Functional ~2, Frail ~1
+    # Tuned so that ~55 is near the Functional/Frail boundary (slightly above Frail).
+    return [
+        (0, 2.92),
+        (10, 2.92),
+        (25, 2.70),
+        (40, 2.35),
+        (55, 2.06),
+        (65, 1.85),
+        (77, 1.62),
+        (92, 1.22),
+    ]
 
-with col_nav:
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("◀ Previous", disabled=(st.session_state.idx == 0), use_container_width=True):
-            st.session_state.idx -= 1
-            st.rerun()
-    with b2:
-        if st.button("Next ▶", disabled=(st.session_state.idx == len(SLIDES) - 1), use_container_width=True):
-            st.session_state.idx += 1
-            st.rerun()
+def build_health_fig(x_end: float):
+    pts = health_curve_points()
 
-    dots_html = "".join(
-        f'<div class="dot {"on" if i == st.session_state.idx else ""}"></div>'
-        for i in range(len(SLIDES))
+    # Build red segment (0 -> x_end) by clipping curve
+    xs = []
+    ys = []
+    for (x, y) in pts:
+        if x <= x_end:
+            xs.append(x); ys.append(y)
+        else:
+            break
+
+    # Ensure we end exactly at x_end (linear interpolation on the next segment)
+    if x_end > xs[-1]:
+        # find the next point
+        next_idx = len(xs)
+        if next_idx < len(pts):
+            x0, y0 = xs[-1], ys[-1]
+            x1, y1 = pts[next_idx]
+            if x1 != x0 and x_end < x1:
+                t = (x_end - x0) / (x1 - x0)
+                xs.append(x_end)
+                ys.append(y0 + t * (y1 - y0))
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys,
+        mode="lines",
+        line=dict(color="#d11a1a", width=6, shape="spline", smoothing=0.7),
+        hoverinfo="skip",
+        name="Health (current)"
+    ))
+
+    tickvals = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,77,80,85,90,92]
+    ticktext = [f"<b>{v}</b>" if v in (77,92) else str(v) for v in tickvals]
+
+    fig.update_layout(
+        height=420,
+        margin=dict(l=10, r=10, t=16, b=40),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        showlegend=False,
     )
-    md(f"""
-<div class="nav-strip">
-  <div class="nav-center">Ages {a0}–{a1}</div>
-  <div class="dots">{dots_html}</div>
-</div>
-""")
 
-with col_bul:
-    bullets_html = "".join(f"<div>• {b}</div>" for b in current["bullets"])
-    md(f"""
-<div class="lrp-card">
-  <div class="bullets-title">{current["bullets_title"]}</div>
-  <div class="bullets">
-    {bullets_html}
-  </div>
-</div>
-""")
-
-st.write("")
-
-# -----------------------------
-# PLOT — cumulative red to current band end; no future line
-# -----------------------------
-red_end = a1
-red_x = list(range(0, red_end + 1))
-red_y = [health_value_sal(a) for a in red_x]
-
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=red_x, y=red_y,
-    mode="lines",
-    line=dict(color="red", width=8, shape="spline"),
-    hoverinfo="skip"
-))
-
-tickvals = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,77,80,85,90,92]
-ticktext = [f"<b>{v}</b>" if v in (77, 92) else str(v) for v in tickvals]
-
-fig.update_layout(
-    height=int(520 * UI_SCALE),
-    margin=dict(l=30, r=20, t=8, b=30),
-    plot_bgcolor="white",
-    paper_bgcolor="white",
-    xaxis=dict(
+    fig.update_xaxes(
         range=[0, 92],
-        title="Age",
         tickmode="array",
         tickvals=tickvals,
         ticktext=ticktext,
-        gridcolor="rgba(0,0,0,0.06)",
-        zeroline=False,
+        title_text="Age",
+        showgrid=False,
         showline=True,
-        linecolor="rgba(0,0,0,0.18)",
         linewidth=1,
-    ),
-    yaxis=dict(
-        range=[0, 100],
-        tickvals=[85, 55, 25],
-        ticktext=["Fit", "Functional", "Frail"],
+        linecolor="rgba(0,0,0,0.24)",
+        ticks="outside",
+        tickfont=dict(size=12, color="rgba(0,0,0,0.55)"),
+        titlefont=dict(size=14, color="rgba(0,0,0,0.55)"),
+    )
+
+    fig.update_yaxes(
+        range=[0.9, 3.1],
+        tickmode="array",
+        tickvals=[3,2,1],
+        ticktext=["Fit","Functional","Frail"],
+        showgrid=True,
         gridcolor="rgba(0,0,0,0.06)",
-        zeroline=False,
         showline=True,
-        linecolor="rgba(0,0,0,0.18)",
         linewidth=1,
-    ),
-    showlegend=False
-)
+        linecolor="rgba(0,0,0,0.24)",
+        ticks="",
+        tickfont=dict(size=13, color="rgba(0,0,0,0.55)"),
+    )
 
-# -----------------------------
-# BOTTOM ROW
-# -----------------------------
-l, r = st.columns([1.10, 2.90], gap="large")
+    return fig
 
-with l:
-    eng_color = ENGINE_COLORS.get(current["engine"], ENGINE_COLORS["green"])
-    md(f"""
+# -------------------------
+# Navigation controls
+# -------------------------
+def prev():
+    st.session_state.idx = clamp(st.session_state.idx - 1, 0, len(BANDS)-1)
+
+def next_():
+    st.session_state.idx = clamp(st.session_state.idx + 1, 0, len(BANDS)-1)
+
+# -------------------------
+# Render
+# -------------------------
+b = BANDS[st.session_state.idx]
+
+col1, col2, col3 = st.columns([1.65, 0.90, 1.45], gap="large")
+
+with col1:
+    st.markdown(
+        f"""
 <div class="lrp-card">
-  <div class="label"><span class="ico">{ICON_DIAG}</span> Diagnosis</div>
-  <div class="body">{current["diagnosis"]}</div>
+  <div class="lrp-title">{b["slide_title"]}</div>
 
-  <div class="label" style="margin-top:{rem(0.75)};"><span class="ico">{ICON_RX}</span> Prescription</div>
-  <div class="body">{current["prescription"]}</div>
+  <div class="lrp-dictword">
+    {b["word"]} <span class="lrp-pos">· {b["pos"]}</span>
+  </div>
+  <div class="lrp-phon">{b["phon"]}</div>
 
-  <div class="label" style="margin-top:{rem(0.85)};">Check Engine</div>
-  <div class="engine-wrap">
-    <div class="engine-big" style="color:{eng_color};" title="Engine status">{ENGINE_SVG}</div>
+  <div class="lrp-def"><span class="lrp-defnum">1)</span> {b["def1"]}</div>
+  <div class="lrp-def"><span class="lrp-defnum">2)</span> {b["def2"]}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+with col2:
+    st.markdown('<div class="lrp-card">', unsafe_allow_html=True)
+    cprev, cnext = st.columns(2)
+    with cprev:
+        st.button("◀ Previous", on_click=prev, use_container_width=True, disabled=(st.session_state.idx==0))
+    with cnext:
+        st.button("Next ▶", on_click=next_, use_container_width=True, disabled=(st.session_state.idx==len(BANDS)-1))
+    st.markdown(f'<div class="ages-label">Ages {b["a0"]}–{b["a1"]}</div>', unsafe_allow_html=True)
+    st.markdown(dots_html(st.session_state.idx, len(BANDS)), unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col3:
+    bullets_html = "<ul>" + "".join([f"<li>{x}</li>" for x in b["bullets"]]) + "</ul>"
+    st.markdown(
+        f"""
+<div class="lrp-card">
+  <div class="lrp-heading">{b["heading"]}</div>
+  <div class="lrp-bullets">{bullets_html}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+left, right = st.columns([1.1, 2.9], gap="large")
+
+with left:
+    st.markdown(
+        f"""
+<div class="lrp-card">
+  <div class="lrp-label"><span class="lrp-ico">🩺</span>DIAGNOSIS</div>
+  <div class="lrp-body">{b["diagnosis"]}</div>
+
+  <div class="lrp-label" style="margin-top:12px;"><span class="lrp-ico">💊</span>PRESCRIPTION</div>
+  <div class="lrp-body">{b["prescription"]}</div>
+
+  <div class="lrp-label" style="margin-top:12px;"><span class="lrp-ico">🛠️</span>CHECK ENGINE</div>
+  <div style="margin-top:8px;">
+    {engine_svg(b["engine"])}
   </div>
 </div>
-""")
+""",
+        unsafe_allow_html=True,
+    )
 
-with r:
-    md('<div class="lrp-card">')
+with right:
+    st.markdown('<div class="lrp-card plot-card">', unsafe_allow_html=True)
+    # Red line grows cumulatively: show up to END of current band.
+    fig = build_health_fig(b["a1"])
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    md("</div>")
-
-md("</div>")  # close lrp-layer
+    st.markdown("</div>", unsafe_allow_html=True)
